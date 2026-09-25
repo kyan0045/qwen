@@ -4,6 +4,7 @@ import { runConfig } from "../../src/cli/commands/config";
 import { runModels } from "../../src/cli/commands/models";
 import { runRecommend } from "../../src/cli/commands/recommend";
 import { main, resolveChatTarget } from "../../src/cli/index";
+import { models } from "../../src/models";
 
 function flags(partial: Partial<CliFlags> = {}): CliFlags {
   return { positionals: [], ...partial };
@@ -70,7 +71,7 @@ describe("offline cli commands", () => {
     const code = await runModels(flags({ json: true }), (line) => lines.push(line));
     const payload = JSON.parse(lines.join("\n")) as unknown[];
     expect(code).toBe(0);
-    expect(payload).toHaveLength(39);
+    expect(payload).toHaveLength(models.length);
   });
 
   it("applies local and parameter constraints to recommendations", async () => {

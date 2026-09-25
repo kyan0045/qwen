@@ -1,6 +1,6 @@
 # qwen
 
-**Unofficial** TypeScript toolkit for [Qwen](https://qwenlm.github.io/) models - a typed model catalog, a multi-provider client (DashScope / OpenAI-compatible / local Ollama), and a fast CLI.
+**Unofficial** TypeScript toolkit for [Qwen](https://qwenlm.github.io/) models: a typed model catalog, a multi-provider client (DashScope / OpenAI-compatible / local Ollama), and a fast CLI.
 
 Zero runtime dependencies. Requires Node `^22.12.0 || ^24.0.0 || >=26.0.0`.
 
@@ -137,12 +137,13 @@ qwen config                              # resolved provider + key source
 
 | Family | Sizes | Notes |
 |---|---|---|
-| `qwen3.8` | 27B | newest stable, vision + tools + thinking |
-| `qwen3.8-flash` | - | **Qwen4 architecture preview** |
-| `qwen3.6` | 27B, 35B | agentic coding, thinking preservation |
-| `qwen3.5` | 0.8B → 122B (+397B cloud) | multimodal, incl. `-coding` variants |
-| `qwen3-next` | 80B | parameter-efficiency focus |
-| `qwen3-coder` / `-next` | 30B-A3B, 480B-A35B | 256K ctx (1M with YaRN) |
+| `qwen3.8` | 27B, 2.4T-A95B, Max, Max-0902 | flagship generation; omni + live-translate specialists |
+| `qwen3.8-flash` | 125B-A6B | **Qwen4 architecture preview** (`qwen3.8-flash-next` open weights; `qwen3.8-flash` API, 1M ctx) |
+| `qwen3.7` | Max, Plus, Flash (hosted) | agent-first generation, 1M ctx; Max is text-only |
+| `qwen3.6` | 27B, 35B-A3B (+ hosted Plus/Flash/Max) | agentic coding, thinking preservation |
+| `qwen3.5` | 0.8B → 122B (+397B-A17B cloud; hosted Plus/Flash) | multimodal, incl. `-coding` variants |
+| `qwen3-next` | 80B-A3B | parameter-efficiency focus |
+| `qwen3-coder` / `-next` | 30B-A3B, 80B-A3B, 480B-A35B | 256K ctx (1M with YaRN) |
 | `qwen3` | 0.6B → 235B-A22B | hybrid `/think` `/no_think` |
 | `qwen3-vl` | 8B, 32B, 235B | vision-language |
 | `qwen3-embedding` | 0.6B, 4B, 8B | up to 4096 dims |
@@ -175,6 +176,8 @@ npm run build
 ```
 
 Supported runtimes are Node `^22.12.0`, `^24.0.0`, and `>=26.0.0`. CI covers Node 22, 24, and 26. Node 18 and Node 20 are end-of-life and are not supported.
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development workflow and commit conventions.
 
 ## Releases
 

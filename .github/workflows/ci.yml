@@ -25,6 +25,6 @@ jobs:
       - run: npm run build
       - run: node dist/cli.js --help
       - run: node dist/cli.js --version
-      - run: node --input-type=module -e 'import("./dist/index.js").then((m) => { if (m.VERSION !== "0.1.0" || m.models.length < 1) { throw new Error("ESM package smoke test failed"); } })'
-      - run: node -e 'const m = require("./dist/index.cjs"); if (m.VERSION !== "0.1.0" || m.models.length < 1) { throw new Error("CJS package smoke test failed"); }'
+      - run: node --input-type=module -e 'import("./dist/index.js").then(async (m) => { const {readFileSync} = await import("node:fs"); const pkg = JSON.parse(readFileSync("package.json", "utf8")); if (m.VERSION !== pkg.version) { throw new Error(`ESM VERSION mismatch: ${m.VERSION} !== ${pkg.version}`); } if (!Array.isArray(m.models) || m.models.length < 1) { throw new Error("ESM package smoke test failed: empty catalog"); } })'
+      - run: node -e 'const m = require("./dist/index.cjs"); const pkg = require("./package.json"); if (m.VERSION !== pkg.version) { throw new Error(`CJS VERSION mismatch: ${m.VERSION} !== ${pkg.version}`); } if (!Array.isArray(m.models) || m.models.length < 1) { throw new Error("CJS package smoke test failed: empty catalog"); }'
       - run: npm pack --dry-run

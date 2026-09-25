@@ -12,6 +12,7 @@ export type QwenThinkingMode = "hybrid" | "always" | "none";
 export type QwenFamily =
   | "qwen3.8-flash"
   | "qwen3.8"
+  | "qwen3.7"
   | "qwen3.6"
   | "qwen3.5"
   | "qwen3-next"
@@ -51,6 +52,7 @@ export interface QwenModel {
 export const FAMILY_RANK: Record<QwenFamily, number> = {
   "qwen3.8-flash": 92,
   "qwen3.8": 100,
+  "qwen3.7": 96,
   "qwen3.6": 94,
   "qwen3.5": 88,
   "qwen3-next": 82,
@@ -85,17 +87,150 @@ export const QWEN3_8_27B: QwenModel = {
 };
 
 export const QWEN3_8_FLASH: QwenModel = {
-  id: "qwen3.8-flash",
-  name: "Qwen3.8 Flash (Qwen4 preview)",
+  id: "qwen3.8-flash-next",
+  name: "Qwen3.8-Flash-Next",
   family: "qwen3.8-flash",
-  params: undefined,
+  params: "125B-A6B",
+  paramCount: 125,
   contextWindow: 262144,
+  maxOutput: 65536,
+  capabilities: ["chat", "thinking", "tools", "vision", "code"],
+  thinking: "hybrid",
+  preview: true,
+  ollamaTag: "qwen3.8-flash-next:125b-a6b-q4_K_M",
+  dashscopeId: "qwen3.8-flash",
+  notes:
+    "First open-weight preview of the Qwen4 architecture. MoE with 125B total / 6B active per token (+51B n-gram embeddings). 262144 tokens natively, 1M with YaRN; the managed Qwen3.8-Flash API (dashscope id qwen3.8-flash) defaults to 1M.",
+};
+
+export const QWEN3_8_FLASH_NEXT: QwenModel = QWEN3_8_FLASH;
+
+export const QWEN3_8_MAX: QwenModel = {
+  id: "qwen3.8-max",
+  name: "Qwen3.8 Max",
+  family: "qwen3.8",
+  params: "2.4T-A95B",
+  paramCount: 2400,
+  contextWindow: 1000000,
+  maxOutput: 131072,
+  capabilities: ["chat", "thinking", "tools", "vision", "code"],
+  thinking: "hybrid",
+  cloudOnly: true,
+  dashscopeId: "qwen3.8-max",
+  notes:
+    "Flagship of the Qwen3.8 generation. MoE with 2.4T total / 95B active parameters, 1M context, native vision-language.",
+};
+
+export const QWEN3_8_MAX_0902: QwenModel = {
+  id: "qwen3.8-max-0902",
+  name: "Qwen3.8 Max 0902",
+  family: "qwen3.8",
+  params: "2.4T-A95B",
+  paramCount: 2400,
+  contextWindow: 1000000,
+  maxOutput: 131072,
+  capabilities: ["chat", "thinking", "tools", "vision", "code"],
+  thinking: "hybrid",
+  cloudOnly: true,
+  dashscopeId: "qwen3.8-max-0902",
+  notes: "September 2026 snapshot of the Qwen3.8 Max flagship; supersedes earlier Max checkpoints.",
+};
+
+export const QWEN3_8_2_4T_A95B: QwenModel = {
+  id: "qwen3.8-2.4t-a95b",
+  name: "Qwen3.8 2.4T-A95B",
+  family: "qwen3.8",
+  params: "2.4T-A95B",
+  paramCount: 2400,
+  contextWindow: 262144,
+  maxOutput: 131072,
+  capabilities: ["chat", "thinking", "code"],
+  thinking: "always",
+  cloudOnly: true,
+  notes:
+    "Open-weight Max-class foundation checkpoint. Text only, always thinks. ~5TB of weights: data-center scale, not locally runnable in practice.",
+};
+
+export const QWEN3_8_FLASH_API: QwenModel = {
+  id: "qwen3.8-flash",
+  name: "Qwen3.8 Flash",
+  family: "qwen3.8",
+  contextWindow: 1000000,
+  maxOutput: 131072,
+  capabilities: ["chat", "thinking", "tools", "vision", "code"],
+  thinking: "hybrid",
+  cloudOnly: true,
+  dashscopeId: "qwen3.8-flash",
+  notes:
+    "Managed production counterpart of the Qwen4-architecture preview. 1M context with built-in tools; for the open weights see Qwen3.8-Flash-Next.",
+};
+
+export const QWEN3_8_OMNI_FLASH: QwenModel = {
+  id: "qwen3.8-omni-flash",
+  name: "Qwen3.8-Omni-Flash",
+  family: "qwen3.8",
+  contextWindow: 1000000,
   maxOutput: 65536,
   capabilities: ["chat", "thinking", "tools", "vision"],
   thinking: "hybrid",
-  preview: true,
-  ollamaTag: "qwen3.8-flash-next",
-  notes: "Experimental preview of the architecture that will underpin Qwen4.",
+  cloudOnly: true,
+  dashscopeId: "qwen3.8-omni-flash",
+  notes:
+    "Hosted omni model: text, image, audio and video understanding with text output, adjustable thinking and web search. Output limit provisional; verify against the model page.",
+};
+
+export const QWEN3_8_LIVETRANSLATE: QwenModel = {
+  id: "qwen3.8-livetranslate",
+  name: "Qwen3.8 LiveTranslate",
+  family: "qwen3.8",
+  contextWindow: 262144,
+  maxOutput: 65536,
+  capabilities: ["chat", "translate"],
+  thinking: "none",
+  cloudOnly: true,
+  dashscopeId: "qwen3.8-livetranslate-flash-realtime",
+  notes:
+    "Realtime speech interpretation with speaker separation and synchronized bilingual output. Limits provisional; verify against the model page.",
+};
+
+export const QWEN3_7_MAX: QwenModel = {
+  id: "qwen3.7-max",
+  name: "Qwen3.7 Max",
+  family: "qwen3.7",
+  contextWindow: 1000000,
+  maxOutput: 131072,
+  capabilities: ["chat", "thinking", "tools", "code"],
+  thinking: "hybrid",
+  cloudOnly: true,
+  dashscopeId: "qwen3.7-max",
+  notes:
+    "Flagship of the Qwen3.7 generation for agentic coding and long-horizon tasks. Currently text-only; 262K max chain-of-thought in thinking mode.",
+};
+
+export const QWEN3_7_PLUS: QwenModel = {
+  id: "qwen3.7-plus",
+  name: "Qwen3.7 Plus",
+  family: "qwen3.7",
+  contextWindow: 1000000,
+  maxOutput: 131072,
+  capabilities: ["chat", "thinking", "tools", "vision", "code"],
+  thinking: "hybrid",
+  cloudOnly: true,
+  dashscopeId: "qwen3.7-plus",
+  notes: "Balanced multimodal hybrid agent model; vision-language upgrade over the text-only Max.",
+};
+
+export const QWEN3_7_FLASH: QwenModel = {
+  id: "qwen3.7-flash",
+  name: "Qwen3.7 Flash",
+  family: "qwen3.7",
+  contextWindow: 1000000,
+  maxOutput: 131072,
+  capabilities: ["chat", "thinking", "tools", "vision", "code"],
+  thinking: "hybrid",
+  cloudOnly: true,
+  dashscopeId: "qwen3.7-flash",
+  notes: "Lightweight high-throughput multimodal model with function calling and 1M context.",
 };
 
 export const QWEN3_6_27B: QwenModel = {
@@ -113,16 +248,57 @@ export const QWEN3_6_27B: QwenModel = {
 };
 
 export const QWEN3_6_35B: QwenModel = {
-  id: "qwen3.6-35b",
-  name: "Qwen3.6 35B",
+  id: "qwen3.6-35b-a3b",
+  name: "Qwen3.6 35B-A3B",
   family: "qwen3.6",
-  params: "35B",
+  params: "35B-A3B",
   paramCount: 35,
   contextWindow: 262144,
   maxOutput: 65536,
   capabilities: ["chat", "thinking", "tools", "vision", "code"],
   thinking: "hybrid",
-  ollamaTag: "qwen3.6:35b",
+  ollamaTag: "qwen3.6:35b-a3b",
+  notes: "MoE with 3B activated parameters.",
+};
+
+export const QWEN3_6_PLUS: QwenModel = {
+  id: "qwen3.6-plus",
+  name: "Qwen3.6 Plus",
+  family: "qwen3.6",
+  contextWindow: 1000000,
+  maxOutput: 65536,
+  capabilities: ["chat", "thinking", "tools", "vision", "code"],
+  thinking: "hybrid",
+  cloudOnly: true,
+  dashscopeId: "qwen3.6-plus",
+  notes: "Hosted production model for repository work, visual coding and multi-step execution.",
+};
+
+export const QWEN3_6_FLASH: QwenModel = {
+  id: "qwen3.6-flash",
+  name: "Qwen3.6 Flash",
+  family: "qwen3.6",
+  contextWindow: 1000000,
+  maxOutput: 65536,
+  capabilities: ["chat", "thinking", "tools", "vision", "code"],
+  thinking: "hybrid",
+  cloudOnly: true,
+  dashscopeId: "qwen3.6-flash",
+  notes: "Hosted high-throughput multimodal model with 1M context.",
+};
+
+export const QWEN3_6_MAX_PREVIEW: QwenModel = {
+  id: "qwen3.6-max-preview",
+  name: "Qwen3.6 Max Preview",
+  family: "qwen3.6",
+  contextWindow: 262144,
+  maxOutput: 65536,
+  capabilities: ["chat", "thinking", "tools", "code"],
+  thinking: "hybrid",
+  preview: true,
+  cloudOnly: true,
+  dashscopeId: "qwen3.6-max-preview",
+  notes: "Hosted preview with stronger coding agents and instruction following than Qwen3.6-Plus.",
 };
 
 export const QWEN3_5_0_8B: QwenModel = {
@@ -247,10 +423,10 @@ export const QWEN3_5_122B: QwenModel = {
 };
 
 export const QWEN3_5_397B_CLOUD: QwenModel = {
-  id: "qwen3.5-397b-cloud",
-  name: "Qwen3.5 397B (cloud)",
+  id: "qwen3.5-397b-a17b",
+  name: "Qwen3.5 397B-A17B (cloud)",
   family: "qwen3.5",
-  params: "397B",
+  params: "397B-A17B",
   paramCount: 397,
   contextWindow: 262144,
   maxOutput: 65536,
@@ -261,17 +437,43 @@ export const QWEN3_5_397B_CLOUD: QwenModel = {
   notes: "Runs via Ollama cloud rather than locally.",
 };
 
+export const QWEN3_5_PLUS: QwenModel = {
+  id: "qwen3.5-plus",
+  name: "Qwen3.5 Plus",
+  family: "qwen3.5",
+  contextWindow: 1000000,
+  maxOutput: 65536,
+  capabilities: ["chat", "thinking", "tools", "vision", "code"],
+  thinking: "hybrid",
+  cloudOnly: true,
+  dashscopeId: "qwen3.5-plus",
+  notes: "Hosted large-scale multimodal model with 1M context.",
+};
+
+export const QWEN3_5_FLASH: QwenModel = {
+  id: "qwen3.5-flash",
+  name: "Qwen3.5 Flash",
+  family: "qwen3.5",
+  contextWindow: 1000000,
+  maxOutput: 65536,
+  capabilities: ["chat", "thinking", "tools", "vision", "code"],
+  thinking: "hybrid",
+  cloudOnly: true,
+  dashscopeId: "qwen3.5-flash",
+  notes: "Hosted high-throughput multimodal model with 1M context.",
+};
+
 export const QWEN3_NEXT_80B: QwenModel = {
-  id: "qwen3-next-80b",
-  name: "Qwen3-Next 80B",
+  id: "qwen3-next-80b-a3b",
+  name: "Qwen3-Next 80B-A3B",
   family: "qwen3-next",
-  params: "80B",
+  params: "80B-A3B",
   paramCount: 80,
   contextWindow: 262144,
   maxOutput: 65536,
   capabilities: ["chat", "thinking", "tools", "code"],
   thinking: "hybrid",
-  ollamaTag: "qwen3-next:80b",
+  ollamaTag: "qwen3-next:80b-a3b",
   notes: "Parameter-efficiency and inference-speed focused architecture.",
 };
 

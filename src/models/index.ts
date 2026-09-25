@@ -17,11 +17,25 @@ import {
   QWEN3_5_35B_CODING,
   QWEN3_5_122B,
   QWEN3_5_397B_CLOUD,
+  QWEN3_5_FLASH,
+  QWEN3_5_PLUS,
   QWEN3_6_27B,
   QWEN3_6_35B,
+  QWEN3_6_FLASH,
+  QWEN3_6_MAX_PREVIEW,
+  QWEN3_6_PLUS,
+  QWEN3_7_FLASH,
+  QWEN3_7_MAX,
+  QWEN3_7_PLUS,
   QWEN3_8B,
+  QWEN3_8_2_4T_A95B,
   QWEN3_8_27B,
   QWEN3_8_FLASH,
+  QWEN3_8_FLASH_API,
+  QWEN3_8_LIVETRANSLATE,
+  QWEN3_8_MAX,
+  QWEN3_8_MAX_0902,
+  QWEN3_8_OMNI_FLASH,
   QWEN3_14B,
   QWEN3_30B_A3B,
   QWEN3_32B,
@@ -47,8 +61,20 @@ export * from "./catalog";
 export const models: readonly QwenModel[] = Object.freeze([
   QWEN3_8_27B,
   QWEN3_8_FLASH,
+  QWEN3_8_MAX,
+  QWEN3_8_MAX_0902,
+  QWEN3_8_2_4T_A95B,
+  QWEN3_8_FLASH_API,
+  QWEN3_8_OMNI_FLASH,
+  QWEN3_8_LIVETRANSLATE,
+  QWEN3_7_MAX,
+  QWEN3_7_PLUS,
+  QWEN3_7_FLASH,
   QWEN3_6_27B,
   QWEN3_6_35B,
+  QWEN3_6_PLUS,
+  QWEN3_6_FLASH,
+  QWEN3_6_MAX_PREVIEW,
   QWEN3_5_0_8B,
   QWEN3_5_2B,
   QWEN3_5_4B,
@@ -59,6 +85,8 @@ export const models: readonly QwenModel[] = Object.freeze([
   QWEN3_5_35B_CODING,
   QWEN3_5_122B,
   QWEN3_5_397B_CLOUD,
+  QWEN3_5_PLUS,
+  QWEN3_5_FLASH,
   QWEN3_NEXT_80B,
   QWEN3_CODER_NEXT,
   QWEN3_CODER_30B,
@@ -98,10 +126,10 @@ export function resolveModel(ref: string | QwenModel): QwenModel | undefined {
   if (exact) return exact;
   const lower = ref.toLowerCase();
   return (
-    models.find((m) => m.ollamaTag === lower) ??
-    models.find((m) => m.ollamaTag?.split(":")[0] === lower) ??
-    models.find((m) => m.dashscopeId === lower) ??
-    models.find((m) => m.id === lower) ??
+    models.find((m) => m.ollamaTag?.toLowerCase() === lower) ??
+    models.find((m) => m.ollamaTag?.split(":")[0]?.toLowerCase() === lower) ??
+    models.find((m) => m.dashscopeId?.toLowerCase() === lower) ??
+    models.find((m) => m.id.toLowerCase() === lower) ??
     models.find((m) => m.name.toLowerCase() === lower)
   );
 }

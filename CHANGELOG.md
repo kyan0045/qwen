@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for releases at or after `1.0.0`. Before `1.0.0`, minor versions may include
 breaking changes.
 
+## [Unreleased]
+
 ## [0.1.0] - 2026-09-25
 
 Initial public release.
@@ -24,7 +26,6 @@ Initial public release.
 ### Compatibility
 
 - Requires Node `^22.12.0 || ^24.0.0 || >=26.0.0`.
-- Node 18 and Node 20 are end-of-life and are not supported.
 
 ### Known limitations
 
