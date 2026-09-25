@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run coverage
+      - run: npm run build
+      - run: node dist/cli.js --help
+      - run: node dist/cli.js --version
+      - run: node --input-type=module -e 'import("./dist/index.js").then((m) => { if (m.VERSION !== "0.1.0" || m.models.length < 1) { throw new Error("ESM package smoke test failed"); } })'
+      - run: node -e 'const m = require("./dist/index.cjs"); if (m.VERSION !== "0.1.0" || m.models.length < 1) { throw new Error("CJS package smoke test failed"); }'
+      - run: npm pack --dry-run

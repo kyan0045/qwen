@@ -1,11 +1,70 @@
 {
   "name": "qwen",
-  "version": "0.0.0",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "kyan0045",
+  "version": "0.1.0",
+  "description": "Unofficial TypeScript toolkit for Qwen models: typed model catalog, multi-provider client (DashScope, OpenAI-compatible, Ollama) and a fast CLI.",
+  "keywords": [
+    "qwen",
+    "qwen3",
+    "qwen3.5",
+    "qwen3-coder",
+    "dashscope",
+    "model-studio",
+    "ollama",
+    "llm",
+    "ai",
+    "sdk",
+    "cli",
+    "tongyi",
+    "qianwen"
+  ],
   "license": "MIT",
-  "description": ""
+  "author": "kyan0045",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kyan0045/qwen.git"
+  },
+  "homepage": "https://github.com/kyan0045/qwen#readme",
+  "bugs": {
+    "url": "https://github.com/kyan0045/qwen/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "qwen": "./dist/cli.js"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src test",
+    "format": "biome check --write src test",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.10.2",
+    "@vitest/coverage-v8": "^5.0.2",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vite": "^7.3.6",
+    "vitest": "^5.0.1"
+  }
 }
