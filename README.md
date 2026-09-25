@@ -2,7 +2,7 @@
 
 **Unofficial** TypeScript toolkit for [Qwen](https://qwenlm.github.io/) models - a typed model catalog, a multi-provider client (DashScope / OpenAI-compatible / local Ollama), and a fast CLI.
 
-Zero runtime dependencies. Node 18+.
+Zero runtime dependencies. Requires Node `^22.12.0 || ^24.0.0 || >=26.0.0`.
 
 ---
 
@@ -109,6 +109,13 @@ Precedence: explicit options → provider-specific environment (`DASHSCOPE_HTTP_
 
 Requests have no built-in timeout and are not retried automatically. Pass `signal` in call options when a request must be cancellable.
 
+### Request lifecycle and errors
+
+- Every provider call accepts `{ signal }` through `CallOptions`.
+- Caller-initiated aborts propagate as abort errors; transport and connection failures are wrapped in typed `QwenError` subclasses.
+- HTTP `429` responses expose `RateLimitError.retryAfter` when the provider sends a numeric `Retry-After` header. The client does not sleep or retry automatically.
+- `qwen config` masks API keys but redacts only credentials embedded in base URLs; do not paste secret-bearing URLs into shared logs.
+
 ## CLI
 
 ```bash
@@ -142,7 +149,7 @@ qwen config                              # resolved provider + key source
 | `qwq` | 32B | always-on reasoner |
 | `qwen2.5*` | various | marked `legacy` |
 
-Specs come from Qwen's published model cards and the Ollama library, checked in September 2026. The catalog is data - corrections and new releases are welcome as PRs.
+Specs come from Qwen's published model cards and the Ollama library, checked in September 2026. The catalog is data - corrections and new releases are welcome as PRs. Provider model IDs, availability, and limits can change upstream; live provider behavior is not covered by the automated suite.
 
 ## API surface
 
@@ -163,10 +170,15 @@ npm install
 npm test
 npm run typecheck
 npm run lint
+npm run coverage
 npm run build
 ```
 
-The published runtime supports Node 18+. Development and tests use the locked toolchain and require Node 22.
+Supported runtimes are Node `^22.12.0`, `^24.0.0`, and `>=26.0.0`. CI covers Node 22, 24, and 26. Node 18 and Node 20 are end-of-life and are not supported.
+
+## Releases
+
+See [CHANGELOG.md](./CHANGELOG.md) for release notes. The `0.x` series may introduce breaking changes in minor releases; `1.0.0` will mark the first stable API.
 
 ## License
 
