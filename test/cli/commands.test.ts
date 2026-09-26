@@ -16,8 +16,6 @@ const ENV_KEYS = [
   "QWEN_API_KEY",
   "DASHSCOPE_API_KEY",
   "DASHSCOPE_HTTP_BASE_URL",
-  "OPENAI_API_KEY",
-  "OPENAI_BASE_URL",
   "OLLAMA_HOST",
 ] as const;
 

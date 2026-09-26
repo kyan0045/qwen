@@ -22,7 +22,7 @@ export async function runRepl(options: ReplOptions, out: (s: string) => void): P
   let thinking = options.thinking;
   let current = options.client.model(model);
 
-  out(`qwen REPL — ${current?.name ?? String(model ?? "default model")}`);
+  out(`qwen REPL: ${current?.name ?? String(model ?? "default model")}`);
   out("Type /help for commands.\n");
 
   const banner = () => "qwen> ";

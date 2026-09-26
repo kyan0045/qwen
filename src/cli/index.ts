@@ -123,7 +123,7 @@ async function runChat(flags: CliFlags): Promise<number> {
     if (answer && !answer.endsWith("\n")) process.stdout.write("\n");
     if (reasoning) {
       process.stderr.write(
-        `\n[${reasoning.trim().split("\n").length} lines of reasoning hidden — pass --quiet to hide this note]\n`,
+        `\n[${reasoning.trim().split("\n").length} lines of reasoning hidden (pass --quiet to hide this note)]\n`,
       );
     }
   }

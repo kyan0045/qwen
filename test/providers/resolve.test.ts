@@ -77,6 +77,15 @@ describe("resolveProvider", () => {
     expect(config.baseURL).toBe("http://host.example:11434");
   });
 
+  it("requires an explicit endpoint for the openai provider", () => {
+    expect(() => resolveProvider({ name: "openai" }, {})).toThrow(/explicit endpoint/);
+    const explicit = resolveProvider(
+      { name: "openai", baseURL: "https://explicit.example/v1" },
+      {},
+    );
+    expect(explicit.baseURL).toBe("https://explicit.example/v1");
+  });
+
   it("treats a bare URL provider as OpenAI-compatible", () => {
     const config = resolveProvider("https://api.example/v1", {});
     expect(config.kind).toBe("openai-compat");

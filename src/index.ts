@@ -35,7 +35,6 @@ export * from "./models/catalog";
 
 export {
   DEFAULT_OLLAMA_BASE_URL,
-  DEFAULT_OPENAI_BASE_URL,
   DASHSCOPE_CHINA_BASE_URL,
   DASHSCOPE_INTERNATIONAL_BASE_URL,
   createTransport,

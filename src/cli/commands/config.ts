@@ -18,11 +18,11 @@ function source(config: ProviderConfig): string {
   if (config.name.startsWith("dashscope")) {
     return firstSet("DASHSCOPE_API_KEY", "QWEN_API_KEY");
   }
-  if (config.name === "openai") return firstSet("OPENAI_API_KEY", "QWEN_API_KEY");
+  if (config.name === "openai") return firstSet("QWEN_API_KEY");
   if (config.name === "ollama") {
     return env.QWEN_API_KEY ? "QWEN_API_KEY" : "none required";
   }
-  return firstSet("QWEN_API_KEY", "OPENAI_API_KEY");
+  return firstSet("QWEN_API_KEY");
 }
 
 function redactBaseURL(value: string): string {

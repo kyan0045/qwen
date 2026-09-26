@@ -1,4 +1,4 @@
-export const USAGE = `qwen — unofficial TypeScript toolkit for Qwen models
+export const USAGE = `qwen: unofficial TypeScript toolkit for Qwen models
 
 Usage
   qwen "<prompt>"                 Ask a question (streams the answer)
@@ -33,9 +33,10 @@ Options
 
 Environment
   QWEN_PROVIDER                   Default provider name
-  QWEN_API_KEY / QWEN_BASE_URL    Fallback credentials
+  QWEN_API_KEY                    Key for DashScope fallback and compatible hosts
+  QWEN_BASE_URL                   Endpoint for compatible hosts and custom URLs
   DASHSCOPE_API_KEY               Alibaba Cloud Model Studio key
-  OPENAI_API_KEY / OPENAI_BASE_URL
+  DASHSCOPE_HTTP_BASE_URL         Override the DashScope endpoint
   OLLAMA_HOST                     Default http://localhost:11434
 `;
 

@@ -12,9 +12,9 @@ Zero runtime dependencies. Requires Node `^22.12.0 || ^24.0.0 || >=26.0.0`.
 
 Three things nobody else on npm combines:
 
-1. **A typed model catalog with `recommend()`.** The naming is genuinely hard to follow - `qwen3.5:27b`, `qwen3.6:27b` and `qwen3.8:27b` are different models, `qwen3-coder:30b` is a 30B-A3B MoE, and the bare `qwen` repo on Ollama is still **Qwen 1.5**. This package knows all of that.
-2. **One interface, three backends** - Alibaba Cloud Model Studio (DashScope), any OpenAI-compatible host, and local Ollama.
-3. **Qwen-native semantics** - hybrid thinking mode, thinking budgets, and DashScope's `enable_search` - instead of a generic OpenAI shim.
+1. **A typed model catalog with `recommend()`.** The naming is genuinely hard to follow: `qwen3.5:27b`, `qwen3.6:27b` and `qwen3.8:27b` are different models, `qwen3-coder:30b` is a 30B-A3B MoE, and the bare `qwen` repo on Ollama is still **Qwen 1.5**. This package knows all of that.
+2. **One interface, three backends:** Alibaba Cloud Model Studio (DashScope), any OpenAI-compatible host, and local Ollama.
+3. **Qwen-native semantics:** hybrid thinking mode, thinking budgets, and DashScope's `enable_search` instead of a generic OpenAI shim.
 
 For the full DashScope surface (images, speech, fine-tunes, assistants) use Alibaba's own [`dashscope-sdk-official`](https://www.npmjs.com/package/dashscope-sdk-official). For an agentic coding CLI see [`@qwen-code/qwen-code`](https://www.npmjs.com/package/@qwen-code/qwen-code). This package is the layer in between.
 
@@ -22,9 +22,19 @@ For the full DashScope surface (images, speech, fine-tunes, assistants) use Alib
 
 ```bash
 npm install qwen
-# or run the CLI directly
+# Pick the backend you want. DashScope is the default, so create
+# a key in the Alibaba Cloud Model Studio console, then:
+export DASHSCOPE_API_KEY="sk-..."
+# Any OpenAI-compatible host serving Qwen models instead:
+export QWEN_BASE_URL="https://my-host/v1"
+export QWEN_API_KEY="sk-..."
+# No key needed for local Ollama:
+npx qwen -l "explain quantum tunnelling to a 12 year old"
+# or run the default provider directly
 npx qwen "explain quantum tunnelling to a 12 year old"
 ```
+
+Run `qwen config` at any time to check which provider and key source are active.
 
 ## The catalog
 
@@ -99,15 +109,37 @@ await say("summarise this", { provider: "ollama", model: "qwen3.8:27b" });
 
 ## Providers
 
-| `provider` | Base URL | Credentials |
+| `provider` | Base URL | Key variable |
 |---|---|---|
-| `dashscope` | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` |
-| `dashscope-cn` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` |
-| `openai` | `https://api.openai.com/v1` (or `OPENAI_BASE_URL`) | `OPENAI_API_KEY` |
-| `ollama` | `http://localhost:11434` (or `OLLAMA_HOST`) | none |
+| `dashscope` (default, international) | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` |
+| `dashscope-cn` (China endpoint) | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` |
+| `openai` (compatible protocol, still Qwen models) | `QWEN_BASE_URL` (required) | `QWEN_API_KEY` |
+| `ollama` | `http://localhost:11434` (or `OLLAMA_HOST`) | none needed |
 | any URL | that URL, treated as OpenAI-compatible | `QWEN_API_KEY` |
 
-Precedence: explicit options → provider-specific environment (`DASHSCOPE_HTTP_BASE_URL`, `OPENAI_BASE_URL`, `OLLAMA_HOST`) → `QWEN_BASE_URL` / `QWEN_API_KEY` fallbacks → built-in defaults. With no provider selected, `QWEN_BASE_URL` alone selects a custom OpenAI-compatible endpoint.
+All providers request Qwen models. The `openai` name refers to the protocol only: it has no default endpoint, so point it at a host that serves Qwen via `QWEN_BASE_URL` (or pass `baseURL` in code).
+
+### Credentials: where to put your key
+
+There are two places a key can come from. Use one or the other:
+
+```bash
+# 1. Environment variable (the only option for the CLI:
+#    there is no --api-key flag, and .env files are not autoloaded)
+export DASHSCOPE_API_KEY="sk-..."   # dashscope / dashscope-cn
+export QWEN_API_KEY="sk-..."        # spare key for any provider, or auth for a custom URL
+# Ollama needs no key.
+```
+
+```ts
+// 2. In code (overrides the environment)
+new Qwen({ provider: "dashscope", apiKey: "sk-..." }); // reads DASHSCOPE_API_KEY when omitted
+```
+
+Two fallback rules cover the rest:
+
+- `QWEN_API_KEY` works as a spare key for any provider. The provider's own variable (`DASHSCOPE_API_KEY` for DashScope) wins if both are set, and an `apiKey` passed in code wins over both.
+- Custom endpoints work the same way: `DASHSCOPE_HTTP_BASE_URL` overrides the DashScope endpoint (for a proxy or mirror) and `OLLAMA_HOST` sets the Ollama daemon address, while `QWEN_BASE_URL` works for any of them. With no provider selected, setting `QWEN_BASE_URL` alone uses that URL as an OpenAI-compatible endpoint. `QWEN_PROVIDER` sets the default provider.
 
 Requests have no built-in timeout and are not retried automatically. Pass `signal` in call options when a request must be cancellable.
 
@@ -121,7 +153,9 @@ Requests have no built-in timeout and are not retried automatically. Pass `signa
 ## CLI
 
 ```bash
-qwen "explain this repo"                 # one-shot, streams
+qwen "explain this repo"                 # one-shot, streams (default provider: DashScope)
+qwen -p ollama "explain this repo"       # same, but local Ollama
+qwen -l "explain this repo"              # shorthand for --provider ollama
 qwen                                     # REPL
 cat app.ts | qwen --prompt "review this" # pipe
 qwen -m qwen3-coder:30b --thinking "…"   # explicit model + thinking
@@ -132,6 +166,8 @@ qwen recommend --use coding --local --max-params 32b
 qwen pull qwen3.8:27b                    # ollama pull, with progress
 qwen config                              # resolved provider + key source
 ```
+
+Provider selection: `-p/--provider` wins, then `-l/--local` (means Ollama), then `QWEN_PROVIDER`, then the DashScope default. If a chat fails with an auth error, run `qwen config` to see which provider was resolved and where the key came from. In the REPL, type `/help` for commands (`/model`, `/thinking`, `/system`, `/clear`, `/exit`).
 
 `-j/--json` on any read command for machine-readable output, `-q/--quiet` for answer-only text.
 

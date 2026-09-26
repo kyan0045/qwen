@@ -10,7 +10,6 @@ import { createOpenAICompatTransport } from "./openai-compat";
 import type { ProviderConfig, ProviderInput, Transport } from "./types";
 
 export const DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434";
-export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 
 export {
   DASHSCOPE_CHINA_BASE_URL,
@@ -29,8 +28,6 @@ export type {
 export interface ResolveEnv {
   DASHSCOPE_API_KEY?: string;
   DASHSCOPE_HTTP_BASE_URL?: string;
-  OPENAI_API_KEY?: string;
-  OPENAI_BASE_URL?: string;
   OLLAMA_HOST?: string;
   QWEN_PROVIDER?: string;
   QWEN_API_KEY?: string;
@@ -115,7 +112,7 @@ export function resolveProvider(
         {
           name: "custom",
           baseURL: customURL,
-          apiKey: pickKey(overrides.apiKey, environment.QWEN_API_KEY, environment.OPENAI_API_KEY),
+          apiKey: pickKey(overrides.apiKey, environment.QWEN_API_KEY),
           headers: overrides.headers,
           kind: overrides.kind ?? "openai-compat",
         },
@@ -160,15 +157,17 @@ export function resolveProvider(
       return withDefaults(config, overrides, environment);
     }
     case "openai": {
+      const baseURL = overrides.baseURL ?? environment.QWEN_BASE_URL;
+      if (!baseURL) {
+        throw new ConfigurationError(
+          'Provider "openai" needs an explicit endpoint. Set QWEN_BASE_URL or pass baseURL.',
+        );
+      }
       return withDefaults(
         {
           name: "openai",
-          baseURL:
-            overrides.baseURL ??
-            environment.OPENAI_BASE_URL ??
-            environment.QWEN_BASE_URL ??
-            DEFAULT_OPENAI_BASE_URL,
-          apiKey: pickKey(overrides.apiKey, environment.OPENAI_API_KEY, environment.QWEN_API_KEY),
+          baseURL,
+          apiKey: pickKey(overrides.apiKey, environment.QWEN_API_KEY),
           headers: overrides.headers,
           kind: "openai-compat",
         },
@@ -205,7 +204,7 @@ export function resolveProvider(
         {
           name: isURL ? "custom" : wanted,
           baseURL,
-          apiKey: pickKey(overrides.apiKey, environment.QWEN_API_KEY, environment.OPENAI_API_KEY),
+          apiKey: pickKey(overrides.apiKey, environment.QWEN_API_KEY),
           headers: overrides.headers,
           kind: overrides.kind ?? "openai-compat",
         },
