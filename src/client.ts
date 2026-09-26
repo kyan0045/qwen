@@ -6,6 +6,7 @@ import {
   type Transport,
   createTransport,
   defaultModelFor,
+  isOpenRouterEndpoint,
   resolveProvider,
 } from "./providers";
 import { type ModelRef, modelRefId } from "./types";
@@ -36,7 +37,7 @@ export interface CallOptions {
 
 export function resolveModelName(
   ref: ModelRef | undefined,
-  config: Pick<ProviderConfig, "kind" | "name">,
+  config: Pick<ProviderConfig, "kind" | "name"> & { baseURL?: string },
   fallback?: string,
 ): string {
   if (ref === undefined) {
@@ -52,6 +53,7 @@ export function resolveModelName(
   if (!known) return supplied;
   if (config.kind === "ollama") return known.ollamaTag ?? supplied;
   if (config.name.startsWith("dashscope")) return known.dashscopeId ?? supplied;
+  if (isOpenRouterEndpoint(config.baseURL)) return known.openrouterId ?? supplied;
   return supplied;
 }
 

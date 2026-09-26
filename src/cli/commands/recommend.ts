@@ -8,6 +8,7 @@ function describe(m: QwenModel): string {
   bits.push(m.thinking === "none" ? "no thinking" : `${m.thinking} thinking`);
   if (m.ollamaTag) bits.push(`ollama: ${m.ollamaTag}`);
   if (m.dashscopeId) bits.push(`dashscope: ${m.dashscopeId}`);
+  if (m.openrouterId) bits.push(`openrouter: ${m.openrouterId}`);
   return bits.join("  ·  ");
 }
 

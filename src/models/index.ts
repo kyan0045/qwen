@@ -129,6 +129,7 @@ export function resolveModel(ref: string | QwenModel): QwenModel | undefined {
     models.find((m) => m.ollamaTag?.toLowerCase() === lower) ??
     models.find((m) => m.ollamaTag?.split(":")[0]?.toLowerCase() === lower) ??
     models.find((m) => m.dashscopeId?.toLowerCase() === lower) ??
+    models.find((m) => m.openrouterId?.toLowerCase() === lower) ??
     models.find((m) => m.id.toLowerCase() === lower) ??
     models.find((m) => m.name.toLowerCase() === lower)
   );

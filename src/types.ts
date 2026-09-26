@@ -70,6 +70,7 @@ export interface ModelRefLike {
   id: string;
   ollamaTag?: string;
   dashscopeId?: string;
+  openrouterId?: string;
 }
 
 export type ModelRef = string | ModelRefLike;

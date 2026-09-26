@@ -46,11 +46,22 @@ describe("catalog", () => {
     expect(QWEN3_EMBEDDING_8B.maxOutput).toBe(0);
   });
 
-  it("resolves models by id, ollama tag and dashscope id", () => {
+  it("resolves models by id, ollama tag, dashscope id and openrouter id", () => {
     expect(resolveModel("qwen3-32b")).toBe(getModel("qwen3-32b"));
     expect(resolveModel("qwen3:32b")).toBe(getModel("qwen3-32b"));
     expect(resolveModel("qwen3-coder-plus")).toBe(getModel("qwen3-coder-480b"));
+    expect(resolveModel("qwen/qwen3-coder-plus")).toBe(getModel("qwen3-coder-480b"));
     expect(resolveModel("nope-not-a-model")).toBeUndefined();
+  });
+
+  it("keeps openrouter ids canonical: qwen/ prefix, no pins or variant suffixes", () => {
+    const ids = models.map((m) => m.openrouterId).filter(Boolean) as string[];
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of ids) {
+      expect(id.startsWith("qwen/")).toBe(true);
+      expect(id).not.toMatch(/:|20\d\d[-_]?\d\d[-_]?\d\d|-2507|-02-15|-02-23/);
+    }
   });
 
   it("requireModel throws a helpful error", () => {

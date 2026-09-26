@@ -5,6 +5,11 @@ import { QWEN3_CODER_480B, QWEN3_EMBEDDING_8B } from "../src/models/catalog";
 const ollama = { name: "ollama", kind: "ollama" } as const;
 const dashscope = { name: "dashscope", kind: "openai-compat" } as const;
 const custom = { name: "custom", kind: "openai-compat" } as const;
+const openrouter = {
+  name: "custom",
+  kind: "openai-compat",
+  baseURL: "https://openrouter.ai/api/v1",
+} as const;
 
 describe("resolveModelName", () => {
   it("uses ollama tags for the ollama transport", () => {
@@ -22,6 +27,17 @@ describe("resolveModelName", () => {
     expect(resolveModelName("qwen3.8:27b", custom)).toBe("qwen3.8:27b");
     expect(resolveModelName("qwen3-coder-plus", custom)).toBe("qwen3-coder-plus");
     expect(resolveModelName(QWEN3_CODER_480B, custom)).toBe("qwen3-coder-480b");
+  });
+
+  it("uses openrouter ids on openrouter endpoints", () => {
+    expect(resolveModelName(QWEN3_CODER_480B, openrouter)).toBe("qwen/qwen3-coder-plus");
+    expect(resolveModelName("qwen3-coder-480b", openrouter)).toBe("qwen/qwen3-coder-plus");
+    expect(resolveModelName("qwen/qwen3-coder-plus", openrouter)).toBe("qwen/qwen3-coder-plus");
+  });
+
+  it("falls back to the catalog id when an entry has no openrouter mapping", () => {
+    expect(resolveModelName("qwen3.5-0.8b", openrouter)).toBe("qwen3.5-0.8b");
+    expect(resolveModelName("my-own-tag", openrouter)).toBe("my-own-tag");
   });
 
   it("falls back when no model is given", () => {

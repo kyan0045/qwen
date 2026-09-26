@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { stdin as input } from "node:process";
 import { fileURLToPath } from "node:url";
-import { Qwen } from "../client";
+import { Qwen, resolveModelName } from "../client";
 import { QwenError } from "../errors";
 import { recommend, resolveModel } from "../models";
-import type { Message } from "../types";
+import type { Message, Usage } from "../types";
 import { type CliFlags, parseCliArgs } from "./args";
 import { collectStreamText } from "./collect-stream";
 import { runConfig } from "./commands/config";
@@ -13,6 +13,8 @@ import { runModels } from "./commands/models";
 import { runRecommend } from "./commands/recommend";
 import { USAGE } from "./help";
 import { runRepl } from "./repl";
+import { startSpinner } from "./spinner";
+import { formatStats } from "./stats";
 
 function version(): string {
   try {
@@ -105,16 +107,31 @@ async function runChat(flags: CliFlags): Promise<number> {
   let reasoning = "";
 
   if (flags.json) {
-    const response = await client.chat(request);
-    out(JSON.stringify(response, null, 2));
-    return 0;
+    const spinner = startSpinner();
+    try {
+      const response = await client.chat(request);
+      out(JSON.stringify(response, null, 2));
+      return 0;
+    } finally {
+      spinner.stop();
+    }
   }
 
-  const streamed = await collectStreamText(client.chatStream(request), (text) => {
-    if (!flags.quiet) process.stdout.write(text);
-  });
+  const spinner = startSpinner();
+  const started = Date.now();
+  let streamed: { answer: string; reasoning: string; usage?: Usage };
+  try {
+    streamed = await collectStreamText(client.chatStream(request), (text) => {
+      spinner.stop();
+      if (!flags.quiet) process.stdout.write(text);
+    });
+  } finally {
+    spinner.stop();
+  }
   answer = streamed.answer;
   reasoning = streamed.reasoning;
+  const sentModel = resolveModelName(request.model, client.config);
+  const stats = formatStats(sentModel, streamed.usage, Date.now() - started);
 
   if (flags.quiet) {
     process.stdout.write(answer);
@@ -127,6 +144,7 @@ async function runChat(flags: CliFlags): Promise<number> {
       );
     }
   }
+  process.stderr.write(`\n${stats}\n`);
   return 0;
 }
 

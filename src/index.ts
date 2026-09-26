@@ -39,6 +39,7 @@ export {
   DASHSCOPE_INTERNATIONAL_BASE_URL,
   createTransport,
   defaultModelFor,
+  isOpenRouterEndpoint,
   resolveProvider,
   type ProviderConfig,
   type ProviderInput,

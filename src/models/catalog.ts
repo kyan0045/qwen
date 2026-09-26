@@ -46,6 +46,7 @@ export interface QwenModel {
   embeddingDimensions?: number;
   ollamaTag?: string;
   dashscopeId?: string;
+  openrouterId?: string;
   notes?: string;
 }
 
@@ -82,6 +83,7 @@ export const QWEN3_8_27B: QwenModel = {
   capabilities: ["chat", "thinking", "tools", "vision", "code"],
   thinking: "hybrid",
   ollamaTag: "qwen3.8:27b",
+  openrouterId: "qwen/qwen3.8-27b",
   notes:
     "Newest stable release. Gains on coding, professional work, research and long-horizon agentic tasks.",
 };
@@ -133,6 +135,7 @@ export const QWEN3_8_MAX_0902: QwenModel = {
   thinking: "hybrid",
   cloudOnly: true,
   dashscopeId: "qwen3.8-max-0902",
+  openrouterId: "qwen/qwen3.8-max-0902",
   notes: "September 2026 snapshot of the Qwen3.8 Max flagship; supersedes earlier Max checkpoints.",
 };
 
@@ -147,6 +150,7 @@ export const QWEN3_8_2_4T_A95B: QwenModel = {
   capabilities: ["chat", "thinking", "code"],
   thinking: "always",
   cloudOnly: true,
+  openrouterId: "qwen/qwen3.8-2.4t-a95b",
   notes:
     "Open-weight Max-class foundation checkpoint. Text only, always thinks. ~5TB of weights: data-center scale, not locally runnable in practice.",
 };
@@ -161,6 +165,7 @@ export const QWEN3_8_FLASH_API: QwenModel = {
   thinking: "hybrid",
   cloudOnly: true,
   dashscopeId: "qwen3.8-flash",
+  openrouterId: "qwen/qwen3.8-flash",
   notes:
     "Managed production counterpart of the Qwen4-architecture preview. 1M context with built-in tools; for the open weights see Qwen3.8-Flash-Next.",
 };
@@ -175,6 +180,7 @@ export const QWEN3_8_OMNI_FLASH: QwenModel = {
   thinking: "hybrid",
   cloudOnly: true,
   dashscopeId: "qwen3.8-omni-flash",
+  openrouterId: "qwen/qwen3.8-omni-flash",
   notes:
     "Hosted omni model: text, image, audio and video understanding with text output, adjustable thinking and web search. Output limit provisional; verify against the model page.",
 };
@@ -203,6 +209,7 @@ export const QWEN3_7_MAX: QwenModel = {
   thinking: "hybrid",
   cloudOnly: true,
   dashscopeId: "qwen3.7-max",
+  openrouterId: "qwen/qwen3.7-max",
   notes:
     "Flagship of the Qwen3.7 generation for agentic coding and long-horizon tasks. Currently text-only; 262K max chain-of-thought in thinking mode.",
 };
@@ -217,6 +224,7 @@ export const QWEN3_7_PLUS: QwenModel = {
   thinking: "hybrid",
   cloudOnly: true,
   dashscopeId: "qwen3.7-plus",
+  openrouterId: "qwen/qwen3.7-plus",
   notes: "Balanced multimodal hybrid agent model; vision-language upgrade over the text-only Max.",
 };
 
@@ -230,6 +238,7 @@ export const QWEN3_7_FLASH: QwenModel = {
   thinking: "hybrid",
   cloudOnly: true,
   dashscopeId: "qwen3.7-flash",
+  openrouterId: "qwen/qwen3.7-flash",
   notes: "Lightweight high-throughput multimodal model with function calling and 1M context.",
 };
 
@@ -244,6 +253,7 @@ export const QWEN3_6_27B: QwenModel = {
   capabilities: ["chat", "thinking", "tools", "vision", "code"],
   thinking: "hybrid",
   ollamaTag: "qwen3.6:27b",
+  openrouterId: "qwen/qwen3.6-27b",
   notes: "Upgrades to agentic coding and thinking preservation.",
 };
 
@@ -258,6 +268,7 @@ export const QWEN3_6_35B: QwenModel = {
   capabilities: ["chat", "thinking", "tools", "vision", "code"],
   thinking: "hybrid",
   ollamaTag: "qwen3.6:35b-a3b",
+  openrouterId: "qwen/qwen3.6-35b-a3b",
   notes: "MoE with 3B activated parameters.",
 };
 
@@ -271,6 +282,7 @@ export const QWEN3_6_PLUS: QwenModel = {
   thinking: "hybrid",
   cloudOnly: true,
   dashscopeId: "qwen3.6-plus",
+  openrouterId: "qwen/qwen3.6-plus",
   notes: "Hosted production model for repository work, visual coding and multi-step execution.",
 };
 
@@ -284,6 +296,7 @@ export const QWEN3_6_FLASH: QwenModel = {
   thinking: "hybrid",
   cloudOnly: true,
   dashscopeId: "qwen3.6-flash",
+  openrouterId: "qwen/qwen3.6-flash",
   notes: "Hosted high-throughput multimodal model with 1M context.",
 };
 
@@ -298,6 +311,7 @@ export const QWEN3_6_MAX_PREVIEW: QwenModel = {
   preview: true,
   cloudOnly: true,
   dashscopeId: "qwen3.6-max-preview",
+  openrouterId: "qwen/qwen3.6-max-preview",
   notes: "Hosted preview with stronger coding agents and instruction following than Qwen3.6-Plus.",
 };
 
@@ -352,6 +366,7 @@ export const QWEN3_5_9B: QwenModel = {
   capabilities: ["chat", "thinking", "tools", "vision", "code"],
   thinking: "hybrid",
   ollamaTag: "qwen3.5:9b",
+  openrouterId: "qwen/qwen3.5-9b",
   notes: "Default tag for the Qwen3.5 family.",
 };
 
@@ -366,6 +381,7 @@ export const QWEN3_5_27B: QwenModel = {
   capabilities: ["chat", "thinking", "tools", "vision", "code"],
   thinking: "hybrid",
   ollamaTag: "qwen3.5:27b",
+  openrouterId: "qwen/qwen3.5-27b",
 };
 
 export const QWEN3_5_27B_CODING: QwenModel = {
@@ -393,6 +409,7 @@ export const QWEN3_5_35B: QwenModel = {
   capabilities: ["chat", "thinking", "tools", "vision", "code"],
   thinking: "hybrid",
   ollamaTag: "qwen3.5:35b-a3b",
+  openrouterId: "qwen/qwen3.5-35b-a3b",
   notes: "MoE with 3B activated parameters; strong quality-per-FLOP.",
 };
 
@@ -420,6 +437,7 @@ export const QWEN3_5_122B: QwenModel = {
   capabilities: ["chat", "thinking", "tools", "vision", "code"],
   thinking: "hybrid",
   ollamaTag: "qwen3.5:122b-a10b",
+  openrouterId: "qwen/qwen3.5-122b-a10b",
 };
 
 export const QWEN3_5_397B_CLOUD: QwenModel = {
@@ -434,6 +452,7 @@ export const QWEN3_5_397B_CLOUD: QwenModel = {
   thinking: "hybrid",
   cloudOnly: true,
   ollamaTag: "qwen3.5:397b-cloud",
+  openrouterId: "qwen/qwen3.5-397b-a17b",
   notes: "Runs via Ollama cloud rather than locally.",
 };
 
@@ -474,6 +493,7 @@ export const QWEN3_NEXT_80B: QwenModel = {
   capabilities: ["chat", "thinking", "tools", "code"],
   thinking: "hybrid",
   ollamaTag: "qwen3-next:80b-a3b",
+  openrouterId: "qwen/qwen3-next-80b-a3b-instruct",
   notes: "Parameter-efficiency and inference-speed focused architecture.",
 };
 
@@ -486,6 +506,7 @@ export const QWEN3_CODER_NEXT: QwenModel = {
   capabilities: ["chat", "thinking", "tools", "code"],
   thinking: "hybrid",
   ollamaTag: "qwen3-coder-next",
+  openrouterId: "qwen/qwen3-coder-next",
   notes: "Coding-focused model optimised for agentic workflows and local development.",
 };
 
@@ -500,6 +521,7 @@ export const QWEN3_CODER_30B: QwenModel = {
   capabilities: ["chat", "thinking", "tools", "code"],
   thinking: "hybrid",
   ollamaTag: "qwen3-coder:30b",
+  openrouterId: "qwen/qwen3-coder-30b-a3b-instruct",
   notes: "30B total / 3.3B activated. 256K native context, up to 1M with YaRN.",
 };
 
@@ -515,6 +537,7 @@ export const QWEN3_CODER_480B: QwenModel = {
   thinking: "hybrid",
   ollamaTag: "qwen3-coder:480b",
   dashscopeId: "qwen3-coder-plus",
+  openrouterId: "qwen/qwen3-coder-plus",
   notes: "Flagship agentic coder. 256K native, 1M with YaRN. Needs ~250GB for local.",
 };
 
@@ -573,6 +596,7 @@ export const QWEN3_8B: QwenModel = {
   thinking: "hybrid",
   ollamaTag: "qwen3:8b",
   dashscopeId: "qwen3-8b",
+  openrouterId: "qwen/qwen3-8b",
 };
 
 export const QWEN3_14B: QwenModel = {
@@ -587,6 +611,7 @@ export const QWEN3_14B: QwenModel = {
   thinking: "hybrid",
   ollamaTag: "qwen3:14b",
   dashscopeId: "qwen3-14b",
+  openrouterId: "qwen/qwen3-14b",
 };
 
 export const QWEN3_32B: QwenModel = {
@@ -601,6 +626,7 @@ export const QWEN3_32B: QwenModel = {
   thinking: "hybrid",
   ollamaTag: "qwen3:32b",
   dashscopeId: "qwen3-32b",
+  openrouterId: "qwen/qwen3-32b",
 };
 
 export const QWEN3_30B_A3B: QwenModel = {
@@ -615,6 +641,7 @@ export const QWEN3_30B_A3B: QwenModel = {
   thinking: "hybrid",
   ollamaTag: "qwen3:30b-a3b",
   dashscopeId: "qwen3-30b-a3b",
+  openrouterId: "qwen/qwen3-30b-a3b",
   notes: "MoE: 128 experts, 8 activated. Outperforms QwQ-32B at 1/10th activated params.",
 };
 
@@ -630,6 +657,7 @@ export const QWEN3_235B_A22B: QwenModel = {
   thinking: "hybrid",
   ollamaTag: "qwen3:235b-a22b",
   dashscopeId: "qwen3-235b-a22b",
+  openrouterId: "qwen/qwen3-235b-a22b",
   notes: "Flagship Qwen3 MoE.",
 };
 
@@ -645,6 +673,7 @@ export const QWEN3_VL_8B: QwenModel = {
   thinking: "hybrid",
   ollamaTag: "qwen3-vl:8b",
   dashscopeId: "qwen3-vl-8b",
+  openrouterId: "qwen/qwen3-vl-8b-instruct",
 };
 
 export const QWEN3_VL_32B: QwenModel = {
@@ -659,6 +688,7 @@ export const QWEN3_VL_32B: QwenModel = {
   thinking: "hybrid",
   ollamaTag: "qwen3-vl:32b",
   dashscopeId: "qwen3-vl-32b",
+  openrouterId: "qwen/qwen3-vl-32b-instruct",
 };
 
 export const QWEN3_VL_235B: QwenModel = {
@@ -673,6 +703,7 @@ export const QWEN3_VL_235B: QwenModel = {
   thinking: "hybrid",
   ollamaTag: "qwen3-vl:235b",
   dashscopeId: "qwen3-vl-235b-a22b",
+  openrouterId: "qwen/qwen3-vl-235b-a22b-instruct",
   notes: "Most powerful vision-language model in the Qwen family.",
 };
 
@@ -750,6 +781,7 @@ export const QWEN2_5_72B: QwenModel = {
   legacy: true,
   ollamaTag: "qwen2.5:72b",
   dashscopeId: "qwen2.5-72b-instruct",
+  openrouterId: "qwen/qwen-2.5-72b-instruct",
 };
 
 export const QWEN2_5_CODER_32B: QwenModel = {
@@ -765,6 +797,7 @@ export const QWEN2_5_CODER_32B: QwenModel = {
   legacy: true,
   ollamaTag: "qwen2.5-coder:32b",
   dashscopeId: "qwen2.5-coder-32b-instruct",
+  openrouterId: "qwen/qwen-2.5-coder-32b-instruct",
 };
 
 export const QWEN2_5_VL_32B: QwenModel = {
@@ -804,6 +837,7 @@ export const QWEN_PLUS: QwenModel = {
   capabilities: ["chat", "tools", "code"],
   thinking: "none",
   dashscopeId: "qwen-plus",
+  openrouterId: "qwen/qwen-plus",
   cloudOnly: true,
 };
 

@@ -45,6 +45,16 @@ function pickKey(...candidates: Array<string | undefined>): string | undefined {
   return undefined;
 }
 
+export function isOpenRouterEndpoint(baseURL: string | undefined): boolean {
+  if (!baseURL) return false;
+  try {
+    const host = new URL(baseURL).hostname.toLowerCase();
+    return host === "openrouter.ai" || host.endsWith(".openrouter.ai");
+  } catch {
+    return baseURL.toLowerCase().includes("openrouter.ai");
+  }
+}
+
 function normalizeBaseURL(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -239,6 +249,7 @@ export function createTransport(config: ProviderConfig): Transport {
 
 export function defaultModelFor(config: ProviderConfig): string | undefined {
   if (config.kind === "ollama") return "qwen3.8:27b";
+  if (isOpenRouterEndpoint(config.baseURL)) return "qwen/qwen3-coder-plus";
   if (config.name.startsWith("dashscope")) return "qwen3-coder-plus";
   return "qwen3-coder-plus";
 }

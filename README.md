@@ -44,6 +44,7 @@ import { QWEN3_8_27B, QWEN3_CODER_480B, recommend, models } from "qwen";
 QWEN3_8_27B.contextWindow;      // 262144
 QWEN3_8_27B.capabilities;       // ["chat","thinking","tools","vision","code"]
 QWEN3_8_27B.ollamaTag;          // "qwen3.8:27b"
+QWEN3_8_27B.openrouterId;       // "qwen/qwen3.8-27b"
 
 recommend({ use: "coding", local: true, maxParams: "32b" });
 // → Qwen3-Coder 30B-A3B   (ollama: qwen3-coder:30b)
@@ -54,7 +55,7 @@ recommend({ use: "embed" });
 models.filter((m) => !m.legacy && m.capabilities.includes("vision"));
 ```
 
-Every entry carries `id`, `name`, `family`, `params`, `paramCount`, `contextWindow`, `maxOutput`, `capabilities`, `thinking`, plus `ollamaTag` and `dashscopeId` where they exist.
+Every entry carries `id`, `name`, `family`, `params`, `paramCount`, `contextWindow`, `maxOutput`, `capabilities`, `thinking`, plus `ollamaTag`, `dashscopeId` and `openrouterId` where they exist.
 
 ## Client
 
@@ -119,6 +120,10 @@ await say("summarise this", { provider: "ollama", model: "qwen3.8:27b" });
 
 All providers request Qwen models. The `openai` name refers to the protocol only: it has no default endpoint, so point it at a host that serves Qwen via `QWEN_BASE_URL` (or pass `baseURL` in code).
 
+### OpenRouter
+
+Point `QWEN_BASE_URL` at `https://openrouter.ai/api/v1` and catalog IDs resolve automatically: each entry's `openrouterId` is used when the endpoint host is `openrouter.ai`, so `qwen -m qwen3-coder-30b` sends `qwen/qwen3-coder-30b-a3b-instruct`. Mapped IDs are canonical rolling IDs only, no dated snapshots or `:free` variants. Entries without a mapping (and unknown strings) pass through verbatim, and the no-model default is `qwen/qwen3-coder-plus`.
+
 ### Credentials: where to put your key
 
 There are two places a key can come from. Use one or the other:
@@ -156,6 +161,7 @@ Requests have no built-in timeout and are not retried automatically. Pass `signa
 qwen "explain this repo"                 # one-shot, streams (default provider: DashScope)
 qwen -p ollama "explain this repo"       # same, but local Ollama
 qwen -l "explain this repo"              # shorthand for --provider ollama
+qwen -m qwen3-coder-30b "explain this"   # catalog id; on OpenRouter sends qwen/qwen3-coder-30b-a3b-instruct
 qwen                                     # REPL
 cat app.ts | qwen --prompt "review this" # pipe
 qwen -m qwen3-coder:30b --thinking "…"   # explicit model + thinking
@@ -169,7 +175,7 @@ qwen config                              # resolved provider + key source
 
 Provider selection: `-p/--provider` wins, then `-l/--local` (means Ollama), then `QWEN_PROVIDER`, then the DashScope default. If a chat fails with an auth error, run `qwen config` to see which provider was resolved and where the key came from. In the REPL, type `/help` for commands (`/model`, `/thinking`, `/system`, `/clear`, `/exit`).
 
-`-j/--json` on any read command for machine-readable output, `-q/--quiet` for answer-only text.
+`-j/--json` on any read command for machine-readable output, `-q/--quiet` for answer-only text. After each streamed answer the CLI prints the sent model id with token counts and speed (`[qwen3-coder-plus · prompt 123 · completion 45 · 15.0 tokens/s · 3.0s total]`) to stderr; `--json` responses carry `usage` in the payload instead.
 
 ## Model families covered
 

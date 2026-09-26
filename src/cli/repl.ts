@@ -1,10 +1,14 @@
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 import type { Qwen } from "../client";
+import { resolveModelName } from "../client";
 import { type QwenModel, resolveModel } from "../models";
+import { defaultModelFor } from "../providers";
 import type { Message } from "../types";
 import { collectStreamText } from "./collect-stream";
 import { REPL_HELP } from "./help";
+import { startSpinner } from "./spinner";
+import { formatStats } from "./stats";
 
 export interface ReplOptions {
   client: Qwen;
@@ -89,16 +93,25 @@ export async function runRepl(options: ReplOptions, out: (s: string) => void): P
 
     history.push({ role: "user", content: line });
     out("");
+    const spinner = startSpinner();
+    const started = Date.now();
     try {
       const stream = options.client.chatStream({
         messages: history,
         model,
         thinking,
       });
-      const { answer, reasoning } = await collectStreamText(stream, (text) => {
+      const { answer, reasoning, usage } = await collectStreamText(stream, (text) => {
+        spinner.stop();
         process.stdout.write(text);
       });
       process.stdout.write("\n\n");
+      const sentModel = resolveModelName(
+        model,
+        options.client.config,
+        defaultModelFor(options.client.config),
+      );
+      process.stderr.write(`\n${formatStats(sentModel, usage, Date.now() - started)}\n`);
       if (reasoning) {
         history.push({ role: "assistant", content: answer, reasoningContent: reasoning });
       } else {
@@ -106,6 +119,8 @@ export async function runRepl(options: ReplOptions, out: (s: string) => void): P
       }
     } catch (error) {
       out(`error: ${error instanceof Error ? error.message : String(error)}\n`);
+    } finally {
+      spinner.stop();
     }
   }
   rl.close();

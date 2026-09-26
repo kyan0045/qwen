@@ -16,10 +16,14 @@ Initial public release.
 ### Added
 
 - Typed Qwen model catalog with lookup and recommendation helpers.
+- OpenRouter model ID mapping (`openrouterId` on catalog entries, resolved
+  automatically on `openrouter.ai` endpoints; canonical IDs only).
 - Multi-provider client for DashScope, OpenAI-compatible endpoints, and Ollama.
 - Chat, streaming chat, embeddings, local-model listing, and Ollama pulls.
 - Node.js CLI with one-shot prompts, stdin composition, REPL, catalog,
   recommendation, configuration, and pull commands.
+- CLI status spinner on stderr while waiting for the first streamed token.
+- CLI token and speed summary (sent model id, usage, tok/s and wall time) on stderr after each answer.
 - ESM and CommonJS builds with TypeScript declarations.
 - Unit, provider, CLI, and packaging smoke checks.
 

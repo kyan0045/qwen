@@ -30,4 +30,21 @@ describe("collectStreamText", () => {
     );
     expect(result).toEqual({ answer: "", reasoning: "" });
   });
+
+  it("keeps the last usage reported by the stream", async () => {
+    const result = await collectStreamText(
+      (async function* () {
+        yield {
+          ...chunk({ content: "hi" }),
+          usage: { promptTokens: 10, completionTokens: 1, totalTokens: 11 },
+        };
+        yield {
+          ...chunk({ content: " there" }),
+          usage: { promptTokens: 10, completionTokens: 2, totalTokens: 12 },
+        };
+      })(),
+    );
+    expect(result.answer).toBe("hi there");
+    expect(result.usage).toEqual({ promptTokens: 10, completionTokens: 2, totalTokens: 12 });
+  });
 });

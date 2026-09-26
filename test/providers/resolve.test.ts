@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DASHSCOPE_INTERNATIONAL_BASE_URL,
   createTransport,
+  defaultModelFor,
   resolveProvider,
 } from "../../src/providers";
 
@@ -84,6 +85,11 @@ describe("resolveProvider", () => {
       {},
     );
     expect(explicit.baseURL).toBe("https://explicit.example/v1");
+  });
+
+  it("defaults openrouter endpoints to a routable model id", () => {
+    const config = resolveProvider({}, { QWEN_BASE_URL: "https://openrouter.ai/api/v1" });
+    expect(defaultModelFor(config)).toBe("qwen/qwen3-coder-plus");
   });
 
   it("treats a bare URL provider as OpenAI-compatible", () => {
