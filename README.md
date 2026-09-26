@@ -1,5 +1,7 @@
 # qwen
 
+[![npm version](https://img.shields.io/npm/v/qwen.svg)](https://www.npmjs.com/package/qwen) [![npm downloads](https://img.shields.io/npm/dm/qwen.svg)](https://www.npmjs.com/package/qwen) [![CI](https://github.com/kyan0045/qwen/actions/workflows/ci.yml/badge.svg)](https://github.com/kyan0045/qwen/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/github/license/kyan0045/qwen.svg)](https://github.com/kyan0045/qwen/blob/main/LICENSE)
+
 **Unofficial** TypeScript toolkit for [Qwen](https://qwenlm.github.io/) models: a typed model catalog, a multi-provider client (DashScope / OpenAI-compatible / local Ollama), and a fast CLI.
 
 Zero runtime dependencies. Requires Node `^22.12.0 || ^24.0.0 || >=26.0.0`.
