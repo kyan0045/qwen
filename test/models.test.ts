@@ -133,4 +133,48 @@ describe("recommend", () => {
     expect(models).toContain(QWEN3_CODER_480B);
     expect(models).toContain(QWEN3_8_27B);
   });
+
+  it("validates minContext values", () => {
+    expect(() => recommendAll({ minContext: Number.NaN })).toThrow(/Invalid minContext/);
+    expect(() => recommendAll({ minContext: -1 })).toThrow(/Invalid minContext/);
+    expect(recommendAll({ minContext: 1_000_000 }).every((m) => m.contextWindow >= 1_000_000)).toBe(
+      true,
+    );
+  });
+
+  it("includes cloud-only models only when asked", () => {
+    expect(recommendAll({}).some((m) => m.cloudOnly)).toBe(false);
+    expect(recommendAll({ includeCloud: true }).some((m) => m.cloudOnly)).toBe(true);
+  });
+
+  it("parses m/mb/t/tb param units and rejects garbage", () => {
+    expect(recommendAll({ maxParams: "2400m", includeCloud: true }).length).toBeGreaterThan(0);
+    expect(() => recommendAll({ maxParams: "32bb" })).toThrow(/Invalid maxParams/);
+    expect(() => recommendAll({ maxParams: -5 })).toThrow(/Invalid maxParams/);
+    expect(() => recommendAll({ maxParams: "-5" })).toThrow(/Invalid maxParams/);
+  });
+
+  it("rejects unknown use presets", () => {
+    expect(() => recommendAll({ use: "translate" as never })).toThrow(/Invalid use/);
+    expect(() => recommendAll({ use: "dancing" as never })).toThrow(/Invalid use/);
+  });
+
+  it("resolves ids case-insensitively and leaves ambiguous bare repos unresolved", () => {
+    expect(getModel("QWEN3-32B")?.id).toBe("qwen3-32b");
+    expect(resolveModel("qwen3.5")).toBeUndefined();
+    expect(resolveModel("qwq")?.id).toBe("qwq-32b");
+    expect(resolveModel("QWEN3-CODER-PLUS")?.id).toBe("qwen3-coder-480b");
+  });
+
+  it("only returns thinking models for reasoning", () => {
+    for (const m of recommendAll({ use: "reasoning" })) {
+      expect(m.thinking).not.toBe("none");
+    }
+  });
+
+  it("only returns vision models for local vision", () => {
+    const picks = recommendAll({ use: "vision", local: true });
+    expect(picks.length).toBeGreaterThan(0);
+    for (const m of picks) expect(m.capabilities).toContain("vision");
+  });
 });

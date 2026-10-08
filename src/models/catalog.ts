@@ -1,11 +1,4 @@
-export type QwenCapability =
-  | "chat"
-  | "thinking"
-  | "tools"
-  | "vision"
-  | "code"
-  | "embed"
-  | "translate";
+export type QwenCapability = "chat" | "thinking" | "tools" | "vision" | "code" | "embed";
 
 export type QwenThinkingMode = "hybrid" | "always" | "none";
 
@@ -104,7 +97,7 @@ export const QWEN3_8_FLASH: QwenModel = {
     "First open-weight preview of the Qwen4 architecture. MoE with 125B total / 6B active per token (+51B n-gram embeddings). 262144 tokens natively, 1M with YaRN. Pinned upstream: open-weights release (Ollama library / Hugging Face Qwen org); for the managed API use id qwen3.8-flash (dashscope id qwen3.8-flash, 1M context).",
 };
 
-export const QWEN3_8_FLASH_NEXT: QwenModel = QWEN3_8_FLASH;
+export const QWEN3_8_FLASH_NEXT: QwenModel = { ...QWEN3_8_FLASH };
 
 export const QWEN3_8_MAX: QwenModel = {
   id: "qwen3.8-max",
@@ -185,20 +178,6 @@ export const QWEN3_8_OMNI_FLASH: QwenModel = {
     "Hosted omni model: text, image, audio and video understanding with text output, adjustable thinking and web search. Pinned to dashscope/openrouter id qwen3.8-omni-flash. Output limit provisional; verify against the upstream model page before relying on it.",
 };
 
-export const QWEN3_8_LIVETRANSLATE: QwenModel = {
-  id: "qwen3.8-livetranslate",
-  name: "Qwen3.8 LiveTranslate",
-  family: "qwen3.8",
-  contextWindow: 262144,
-  maxOutput: 65536,
-  capabilities: ["chat", "translate"],
-  thinking: "none",
-  cloudOnly: true,
-  dashscopeId: "qwen3.8-livetranslate-flash-realtime",
-  notes:
-    "Realtime speech interpretation (DashScope wire id qwen3.8-livetranslate-flash-realtime, WebSocket realtime surface; not a plain chat-completions model). Pinned to the wire id; context/output limits provisional — verify against the upstream model page.",
-};
-
 export const QWEN3_7_MAX: QwenModel = {
   id: "qwen3.7-max",
   name: "Qwen3.7 Max",
@@ -211,7 +190,7 @@ export const QWEN3_7_MAX: QwenModel = {
   dashscopeId: "qwen3.7-max",
   openrouterId: "qwen/qwen3.7-max",
   notes:
-    "Flagship of the Qwen3.7 generation for agentic coding and long-horizon tasks. Bare alias (floats; pin to a dated snapshot such as qwen3.7-max-2026-06-08 for reproducibility). Cataloged as text-only; later dated snapshots add vision — verify capabilities against the upstream model page before relying on vision.",
+    "Flagship of the Qwen3.7 generation for agentic coding and long-horizon tasks. Bare alias (floats; pin to a dated snapshot such as qwen3.7-max-2026-06-08 for reproducibility). Cataloged as text-only; later dated snapshots add vision, so verify capabilities against the upstream model page before relying on vision.",
 };
 
 export const QWEN3_7_PLUS: QwenModel = {
@@ -503,13 +482,16 @@ export const QWEN3_CODER_NEXT: QwenModel = {
   id: "qwen3-coder-next",
   name: "Qwen3-Coder-Next",
   family: "qwen3-coder-next",
+  params: "80B-A3B",
+  paramCount: 80,
   contextWindow: 262144,
   maxOutput: 65536,
   capabilities: ["chat", "thinking", "tools", "code"],
   thinking: "hybrid",
-  ollamaTag: "qwen3-coder-next",
+  ollamaTag: "qwen3-coder-next:latest",
   openrouterId: "qwen/qwen3-coder-next",
-  notes: "Coding-focused model optimised for agentic workflows and local development.",
+  notes:
+    "Coding-focused MoE: 80B total / 3B activated parameters. Pinned upstream: Qwen/Qwen3-Coder-Next on Hugging Face and the Ollama library entry.",
 };
 
 export const QWEN3_CODER_30B: QwenModel = {
@@ -813,6 +795,7 @@ export const QWEN2_5_VL_32B: QwenModel = {
   capabilities: ["chat", "vision"],
   thinking: "none",
   legacy: true,
+  // Upstream Ollama repo spelling (no dash): qwen2.5vl.
   ollamaTag: "qwen2.5vl:32b",
   dashscopeId: "qwen2.5-vl-32b-instruct",
 };
