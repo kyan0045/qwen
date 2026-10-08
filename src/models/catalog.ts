@@ -100,9 +100,8 @@ export const QWEN3_8_FLASH: QwenModel = {
   thinking: "hybrid",
   preview: true,
   ollamaTag: "qwen3.8-flash-next:125b-a6b-q4_K_M",
-  dashscopeId: "qwen3.8-flash",
   notes:
-    "First open-weight preview of the Qwen4 architecture. MoE with 125B total / 6B active per token (+51B n-gram embeddings). 262144 tokens natively, 1M with YaRN; the managed Qwen3.8-Flash API (dashscope id qwen3.8-flash) defaults to 1M.",
+    "First open-weight preview of the Qwen4 architecture. MoE with 125B total / 6B active per token (+51B n-gram embeddings). 262144 tokens natively, 1M with YaRN. Pinned upstream: open-weights release (Ollama library / Hugging Face Qwen org); for the managed API use id qwen3.8-flash (dashscope id qwen3.8-flash, 1M context).",
 };
 
 export const QWEN3_8_FLASH_NEXT: QwenModel = QWEN3_8_FLASH;
@@ -120,7 +119,7 @@ export const QWEN3_8_MAX: QwenModel = {
   cloudOnly: true,
   dashscopeId: "qwen3.8-max",
   notes:
-    "Flagship of the Qwen3.8 generation. MoE with 2.4T total / 95B active parameters, 1M context, native vision-language.",
+    "Flagship of the Qwen3.8 generation. MoE with 2.4T total / 95B active parameters, 1M context, native vision-language. Bare alias: floats to the latest Max checkpoint (currently equivalent to a dated snapshot such as qwen3.8-max-0902); pin to a dated id for reproducibility. Verify context/output against the DashScope model page.",
 };
 
 export const QWEN3_8_MAX_0902: QwenModel = {
@@ -136,7 +135,8 @@ export const QWEN3_8_MAX_0902: QwenModel = {
   cloudOnly: true,
   dashscopeId: "qwen3.8-max-0902",
   openrouterId: "qwen/qwen3.8-max-0902",
-  notes: "September 2026 snapshot of the Qwen3.8 Max flagship; supersedes earlier Max checkpoints.",
+  notes:
+    "Pinned September 2026 snapshot of the Qwen3.8 Max flagship (dashscope id qwen3.8-max-0902); prefer dated ids over the floating qwen3.8-max alias.",
 };
 
 export const QWEN3_8_2_4T_A95B: QwenModel = {
@@ -167,7 +167,7 @@ export const QWEN3_8_FLASH_API: QwenModel = {
   dashscopeId: "qwen3.8-flash",
   openrouterId: "qwen/qwen3.8-flash",
   notes:
-    "Managed production counterpart of the Qwen4-architecture preview. 1M context with built-in tools; for the open weights see Qwen3.8-Flash-Next.",
+    "Managed production counterpart of the Qwen4-architecture preview (dashscope/openrouter id qwen3.8-flash, 1M context). Bare alias that floats; for the open weights see Qwen3.8-Flash-Next (id qwen3.8-flash-next).",
 };
 
 export const QWEN3_8_OMNI_FLASH: QwenModel = {
@@ -182,7 +182,7 @@ export const QWEN3_8_OMNI_FLASH: QwenModel = {
   dashscopeId: "qwen3.8-omni-flash",
   openrouterId: "qwen/qwen3.8-omni-flash",
   notes:
-    "Hosted omni model: text, image, audio and video understanding with text output, adjustable thinking and web search. Output limit provisional; verify against the model page.",
+    "Hosted omni model: text, image, audio and video understanding with text output, adjustable thinking and web search. Pinned to dashscope/openrouter id qwen3.8-omni-flash. Output limit provisional; verify against the upstream model page before relying on it.",
 };
 
 export const QWEN3_8_LIVETRANSLATE: QwenModel = {
@@ -196,7 +196,7 @@ export const QWEN3_8_LIVETRANSLATE: QwenModel = {
   cloudOnly: true,
   dashscopeId: "qwen3.8-livetranslate-flash-realtime",
   notes:
-    "Realtime speech interpretation with speaker separation and synchronized bilingual output. Limits provisional; verify against the model page.",
+    "Realtime speech interpretation (DashScope wire id qwen3.8-livetranslate-flash-realtime, WebSocket realtime surface; not a plain chat-completions model). Pinned to the wire id; context/output limits provisional — verify against the upstream model page.",
 };
 
 export const QWEN3_7_MAX: QwenModel = {
@@ -211,7 +211,7 @@ export const QWEN3_7_MAX: QwenModel = {
   dashscopeId: "qwen3.7-max",
   openrouterId: "qwen/qwen3.7-max",
   notes:
-    "Flagship of the Qwen3.7 generation for agentic coding and long-horizon tasks. Currently text-only; 262K max chain-of-thought in thinking mode.",
+    "Flagship of the Qwen3.7 generation for agentic coding and long-horizon tasks. Bare alias (floats; pin to a dated snapshot such as qwen3.7-max-2026-06-08 for reproducibility). Cataloged as text-only; later dated snapshots add vision — verify capabilities against the upstream model page before relying on vision.",
 };
 
 export const QWEN3_7_PLUS: QwenModel = {
@@ -225,7 +225,8 @@ export const QWEN3_7_PLUS: QwenModel = {
   cloudOnly: true,
   dashscopeId: "qwen3.7-plus",
   openrouterId: "qwen/qwen3.7-plus",
-  notes: "Balanced multimodal hybrid agent model; vision-language upgrade over the text-only Max.",
+  notes:
+    "Balanced multimodal hybrid agent model; vision-language upgrade over the text-only Max. Bare alias (floats; pin to a dated snapshot such as qwen3.7-plus-2026-05-26 for reproducibility).",
 };
 
 export const QWEN3_7_FLASH: QwenModel = {
@@ -239,7 +240,8 @@ export const QWEN3_7_FLASH: QwenModel = {
   cloudOnly: true,
   dashscopeId: "qwen3.7-flash",
   openrouterId: "qwen/qwen3.7-flash",
-  notes: "Lightweight high-throughput multimodal model with function calling and 1M context.",
+  notes:
+    "Lightweight high-throughput multimodal model with function calling and 1M context. Bare alias (floats; pin to a dated snapshot such as qwen3.7-flash-2026-07-15 for reproducibility).",
 };
 
 export const QWEN3_6_27B: QwenModel = {

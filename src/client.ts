@@ -48,12 +48,15 @@ export function resolveModelName(
     }
     return fallback;
   }
+  if (typeof ref === "string" && !ref.trim()) {
+    throw new ConfigurationError("Model id must not be empty.");
+  }
   const supplied = typeof ref === "string" ? ref : ref.id;
   const known = typeof ref === "string" ? resolveModel(ref) : ref;
   if (!known) return supplied;
   if (config.kind === "ollama") return known.ollamaTag ?? supplied;
-  if (config.name.startsWith("dashscope")) return known.dashscopeId ?? supplied;
   if (isOpenRouterEndpoint(config.baseURL)) return known.openrouterId ?? supplied;
+  if (config.name.toLowerCase().startsWith("dashscope")) return known.dashscopeId ?? supplied;
   return supplied;
 }
 
@@ -81,7 +84,10 @@ export class Qwen {
   }
 
   model(ref?: ModelRef): QwenModel | undefined {
-    return resolveModel(modelRefId(ref ?? this.defaultModel) ?? "");
+    const target = ref ?? this.defaultModel;
+    if (target === undefined) return undefined;
+    if (typeof target !== "string") return target as QwenModel;
+    return resolveModel(modelRefId(target) ?? "");
   }
 
   private pickModel(ref?: ModelRef): string {
