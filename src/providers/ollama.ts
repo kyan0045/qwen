@@ -1,4 +1,4 @@
-import { ConfigurationError } from "../errors";
+import { APIError, ConfigurationError } from "../errors";
 import { modelRefId, modelRefOllama } from "../types";
 import type {
   ChatChunk,
@@ -14,7 +14,7 @@ import type {
   ToolCall,
   Usage,
 } from "../types";
-import { ndjsonLines, rawRequest, requestJSON } from "./http";
+import { isAbortError, ndjsonLines, rawRequest, requestJSON } from "./http";
 import type { CallOptions, Transport } from "./types";
 
 interface OllamaToolCall {
@@ -162,8 +162,9 @@ function usageFromPayload(p: OllamaChatPayload): Usage | undefined {
   const prompt = p.prompt_eval_count;
   const completion = p.eval_count;
   if (prompt === undefined && completion === undefined) return undefined;
-  const promptTokens = prompt ?? 0;
-  const completionTokens = completion ?? 0;
+  const promptTokens = Number(prompt ?? 0);
+  const completionTokens = Number(completion ?? 0);
+  if (!Number.isFinite(promptTokens) || !Number.isFinite(completionTokens)) return undefined;
   return {
     promptTokens,
     completionTokens,
@@ -191,11 +192,7 @@ export interface OllamaTransportOptions {
 }
 
 export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
-  const headerBag = (): Record<string, string> => {
-    const h: Record<string, string> = { ...(opts.headers ?? {}) };
-    if (opts.apiKey) h.authorization = `Bearer ${opts.apiKey}`;
-    return h;
-  };
+  const headerBag = (): Record<string, string> => ({ ...(opts.headers ?? {}) });
 
   const transport: Transport = {
     async chat(req: ChatRequest, call?: CallOptions): Promise<ChatResponse> {
@@ -203,11 +200,21 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         baseURL: opts.baseURL,
         path: "/api/chat",
         method: "POST",
+        apiKey: opts.apiKey,
         headers: headerBag(),
         body: buildBody(req, false),
         signal: call?.signal,
       });
-      const payload = (await response.json()) as OllamaChatPayload;
+      let payload: OllamaChatPayload & { error?: string };
+      try {
+        payload = (await response.json()) as OllamaChatPayload & { error?: string };
+      } catch (cause) {
+        if (isAbortError(cause)) throw cause;
+        throw new APIError("Invalid JSON response from Ollama provider", { cause });
+      }
+      if (typeof payload.error === "string" && payload.error) {
+        throw new APIError(payload.error, { body: payload });
+      }
       return {
         id: payload.created_at ?? "",
         model: payload.model ?? modelRefId(req.model) ?? "",
@@ -223,17 +230,22 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         baseURL: opts.baseURL,
         path: "/api/chat",
         method: "POST",
+        apiKey: opts.apiKey,
         headers: headerBag(),
         body: buildBody(req, true),
         signal: call?.signal,
         stream: true,
       });
       for await (const line of ndjsonLines(response)) {
-        let payload: OllamaChatPayload;
+        call?.signal?.throwIfAborted?.();
+        let payload: OllamaChatPayload & { error?: string };
         try {
-          payload = JSON.parse(line) as OllamaChatPayload;
+          payload = JSON.parse(line) as OllamaChatPayload & { error?: string };
         } catch {
           continue;
+        }
+        if (typeof payload.error === "string" && payload.error) {
+          throw new APIError(payload.error, { body: payload });
         }
         const delta: ChatChunk["delta"] = {};
         const content = payload.message?.content;
@@ -243,7 +255,7 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         const toolCalls = payload.message?.tool_calls;
         if (toolCalls?.length) {
           delta.toolCalls = toolCalls.map((t, index) => ({
-            index: typeof t.id === "string" ? index : index,
+            index,
             id: t.id,
             function: {
               name: t.function?.name,
@@ -272,6 +284,7 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         baseURL: opts.baseURL,
         path: "/api/embed",
         method: "POST",
+        apiKey: opts.apiKey,
         headers: headerBag(),
         body: {
           model: modelRefOllama(req.model),
@@ -283,12 +296,17 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
       });
       let rows = payload.embeddings;
       if (!rows && Array.isArray(payload.embedding)) rows = [payload.embedding];
-      if (!rows) rows = [];
-      const promptTokens = payload.prompt_eval_count ?? 0;
+      if (!Array.isArray(rows)) {
+        throw new APIError("Invalid embedding response from Ollama provider", {
+          body: payload,
+        });
+      }
+      const promptTokens = Number(payload.prompt_eval_count ?? 0);
+      const safePrompt = Number.isFinite(promptTokens) ? promptTokens : 0;
       return {
         embeddings: rows,
         dimensions: rows[0]?.length ?? 0,
-        usage: { promptTokens, completionTokens: 0, totalTokens: promptTokens },
+        usage: { promptTokens: safePrompt, completionTokens: 0, totalTokens: safePrompt },
         raw: payload,
       };
     },
@@ -298,6 +316,7 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         baseURL: opts.baseURL,
         path: "/api/tags",
         method: "GET",
+        apiKey: opts.apiKey,
         headers: headerBag(),
         signal: call?.signal,
       });
@@ -328,20 +347,22 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         baseURL: opts.baseURL,
         path: "/api/pull",
         method: "POST",
+        apiKey: opts.apiKey,
         headers: headerBag(),
         body: { name: tag, stream: true },
         signal: opts2?.signal,
         stream: true,
       });
       for await (const line of ndjsonLines(response)) {
+        opts2?.signal?.throwIfAborted?.();
         let payload: PullProgress & { error?: string };
         try {
           payload = JSON.parse(line) as PullProgress & { error?: string };
         } catch {
           continue;
         }
-        if (payload.error) throw new Error(payload.error);
-        opts2?.onProgress?.(payload);
+        if (payload.error) throw new APIError(payload.error, { body: payload });
+        await opts2?.onProgress?.(payload);
       }
     },
   };

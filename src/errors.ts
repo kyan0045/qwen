@@ -63,6 +63,10 @@ export class ConnectionError extends QwenError {
 }
 
 function readMessage(body: unknown): string | undefined {
+  if (typeof body === "string") {
+    const trimmed = body.trim();
+    return trimmed ? trimmed.slice(0, 500) : undefined;
+  }
   if (!body || typeof body !== "object") return undefined;
   const b = body as Record<string, unknown>;
   const error = b.error;

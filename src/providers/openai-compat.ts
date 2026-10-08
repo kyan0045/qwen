@@ -1,3 +1,5 @@
+import { APIError } from "../errors";
+import { modelRefId } from "../types";
 import type {
   ChatChunk,
   ChatRequest,
@@ -11,7 +13,7 @@ import type {
   ToolCallDelta,
   Usage,
 } from "../types";
-import { rawRequest, requestJSON, sseData } from "./http";
+import { isAbortError, rawRequest, requestJSON, sseData } from "./http";
 import type { CallOptions, Transport } from "./types";
 
 function toWireMessage(m: Message): Record<string, unknown> {
@@ -38,7 +40,7 @@ export function buildChatBody(req: ChatRequest): Record<string, unknown> {
   const body: Record<string, unknown> = {
     messages: req.messages.map(toWireMessage),
   };
-  if (req.model) body.model = req.model;
+  if (req.model) body.model = modelRefId(req.model) ?? req.model;
   if (req.temperature !== undefined) body.temperature = req.temperature;
   if (req.topP !== undefined) body.top_p = req.topP;
   if (req.maxTokens !== undefined) body.max_tokens = req.maxTokens;
@@ -72,9 +74,28 @@ export function buildChatBody(req: ChatRequest): Record<string, unknown> {
 function parseUsage(raw: unknown): Usage | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const u = raw as Record<string, unknown>;
+  const hasPrompt = u.prompt_tokens !== undefined && u.prompt_tokens !== null;
+  const hasPromptAlt = u.promptTokens !== undefined && u.promptTokens !== null;
+  const hasCompletion = u.completion_tokens !== undefined && u.completion_tokens !== null;
+  const hasCompletionAlt = u.completionTokens !== undefined && u.completionTokens !== null;
+  const hasTotal = u.total_tokens !== undefined && u.total_tokens !== null;
+  const hasTotalAlt = u.totalTokens !== undefined && u.totalTokens !== null;
+  if (
+    !hasPrompt &&
+    !hasPromptAlt &&
+    !hasCompletion &&
+    !hasCompletionAlt &&
+    !hasTotal &&
+    !hasTotalAlt
+  ) {
+    return undefined;
+  }
   const prompt = Number(u.prompt_tokens ?? u.promptTokens ?? 0);
   const completion = Number(u.completion_tokens ?? u.completionTokens ?? 0);
   const total = Number(u.total_tokens ?? u.totalTokens ?? prompt + completion);
+  if (!Number.isFinite(prompt) || !Number.isFinite(completion) || !Number.isFinite(total)) {
+    return undefined;
+  }
   const promptDetails = u.prompt_tokens_details as Record<string, unknown> | undefined;
   const completionDetails = u.completion_tokens_details as Record<string, unknown> | undefined;
   const usage: Usage = {
@@ -223,13 +244,20 @@ export function createOpenAICompatTransport(opts: OpenAICompatOptions): Transpor
   return {
     async chat(req, call) {
       const response = await send(req, false, call);
-      const payload = await response.json();
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch (cause) {
+        if (isAbortError(cause)) throw cause;
+        throw new APIError(`Invalid JSON response from ${opts.name} provider`, { cause });
+      }
       return parseChatResponse(payload);
     },
 
     async *chatStream(req, call) {
       const response = await send(req, true, call);
       for await (const data of sseData(response)) {
+        call?.signal?.throwIfAborted?.();
         let payload: unknown;
         try {
           payload = JSON.parse(data);
