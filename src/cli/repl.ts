@@ -15,6 +15,10 @@ export interface ReplOptions {
   model?: string;
   system?: string;
   thinking?: boolean;
+  thinkingBudget?: number;
+  enableSearch?: boolean;
+  temperature?: number;
+  maxTokens?: number;
 }
 
 export async function runRepl(options: ReplOptions, out: (s: string) => void): Promise<void> {
@@ -68,18 +72,22 @@ export async function runRepl(options: ReplOptions, out: (s: string) => void): P
           break;
         case "/thinking": {
           const value = arg.toLowerCase();
-          thinking =
-            value === "on" || value === "true" || value === "1"
-              ? true
-              : value === "off" || value === "false" || value === "0"
-                ? false
-                : !thinking;
+          if (!arg) {
+            thinking = !thinking;
+          } else if (value === "on" || value === "true" || value === "1") {
+            thinking = true;
+          } else if (value === "off" || value === "false" || value === "0") {
+            thinking = false;
+          } else {
+            out("usage: /thinking on|off");
+            break;
+          }
           out(`thinking: ${thinking ? "on" : "off"}`);
           break;
         }
         case "/system":
           options.system = arg || undefined;
-          for (let i = 0; i < history.length; i++) {
+          for (let i = history.length - 1; i >= 0; i--) {
             if (history[i]?.role === "system") history.splice(i, 1);
           }
           if (options.system) history.unshift({ role: "system", content: options.system });
@@ -91,6 +99,7 @@ export async function runRepl(options: ReplOptions, out: (s: string) => void): P
       continue;
     }
 
+    const mark = history.length;
     history.push({ role: "user", content: line });
     out("");
     const spinner = startSpinner();
@@ -100,6 +109,10 @@ export async function runRepl(options: ReplOptions, out: (s: string) => void): P
         messages: history,
         model,
         thinking,
+        thinkingBudget: options.thinkingBudget,
+        enableSearch: options.enableSearch,
+        temperature: options.temperature,
+        maxTokens: options.maxTokens,
       });
       const { answer, reasoning, usage } = await collectStreamText(stream, (text) => {
         spinner.stop();
@@ -112,12 +125,15 @@ export async function runRepl(options: ReplOptions, out: (s: string) => void): P
         defaultModelFor(options.client.config),
       );
       process.stderr.write(`\n${formatStats(sentModel, usage, Date.now() - started)}\n`);
-      if (reasoning) {
+      if (!answer && !reasoning) {
+        history.splice(mark, 1);
+      } else if (reasoning) {
         history.push({ role: "assistant", content: answer, reasoningContent: reasoning });
       } else {
         history.push({ role: "assistant", content: answer });
       }
     } catch (error) {
+      history.splice(mark, 1);
       out(`error: ${error instanceof Error ? error.message : String(error)}\n`);
     } finally {
       spinner.stop();
