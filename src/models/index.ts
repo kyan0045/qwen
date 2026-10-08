@@ -117,7 +117,7 @@ export const models: readonly QwenModel[] = Object.freeze([
 export const modelsById: ReadonlyMap<string, QwenModel> = new Map(models.map((m) => [m.id, m]));
 
 export function getModel(id: string): QwenModel | undefined {
-  return modelsById.get(id);
+  return modelsById.get(id) ?? models.find((m) => m.id.toLowerCase() === id.toLowerCase());
 }
 
 export function resolveModel(ref: string | QwenModel): QwenModel | undefined {
@@ -125,9 +125,14 @@ export function resolveModel(ref: string | QwenModel): QwenModel | undefined {
   const exact = modelsById.get(ref);
   if (exact) return exact;
   const lower = ref.toLowerCase();
+  const byTag = models.find((m) => m.ollamaTag?.toLowerCase() === lower);
+  if (byTag) return byTag;
+  // Bare repo prefixes (e.g. "qwen3.5" for "qwen3.5:9b") are ambiguous: multiple
+  // size variants share the same repo. Only resolve when exactly one model
+  // matches, otherwise fall through instead of shadowing the first entry.
+  const prefixMatches = models.filter((m) => m.ollamaTag?.split(":")[0]?.toLowerCase() === lower);
+  if (prefixMatches.length === 1) return prefixMatches[0];
   return (
-    models.find((m) => m.ollamaTag?.toLowerCase() === lower) ??
-    models.find((m) => m.ollamaTag?.split(":")[0]?.toLowerCase() === lower) ??
     models.find((m) => m.dashscopeId?.toLowerCase() === lower) ??
     models.find((m) => m.openrouterId?.toLowerCase() === lower) ??
     models.find((m) => m.id.toLowerCase() === lower) ??
@@ -162,8 +167,12 @@ export interface RecommendOptions {
 function parseParamLimit(value: number | string | undefined): number | undefined {
   if (value === undefined) return undefined;
   if (typeof value === "number") return value;
-  const match = /^(\d+(?:\.\d+)?)\s*b?$/i.exec(value.trim());
-  return match ? Number(match[1]) : undefined;
+  const match = /^(\d+(?:\.\d+)?)\s*([tmb]?b?)?$/i.exec(value.trim());
+  if (!match) return undefined;
+  const num = Number(match[1]);
+  const suffix = (match[2] ?? "").toLowerCase();
+  if (suffix === "t" || suffix === "tb") return num * 1000;
+  return num;
 }
 
 function has(m: QwenModel, cap: QwenCapability): boolean {
@@ -202,10 +211,20 @@ export function recommendAll(opts: RecommendOptions = {}): QwenModel[] {
       `Invalid maxParams ${JSON.stringify(opts.maxParams)}. Use a value such as 32 or "32b".`,
     );
   }
+  if (limit !== undefined && limit < 0) {
+    throw new Error(`Invalid maxParams ${JSON.stringify(opts.maxParams)}. Must be >= 0.`);
+  }
+  if (opts.minContext !== undefined && (!Number.isFinite(opts.minContext) || opts.minContext < 0)) {
+    throw new Error(
+      `Invalid minContext ${JSON.stringify(opts.minContext)}. Must be a finite number >= 0.`,
+    );
+  }
   const want: QwenCapability[] = [];
   if (opts.use === "embed") want.push("embed");
   if (opts.use === "vision" || opts.vision) want.push("vision");
   if (opts.use === "coding" || opts.code) want.push("code");
+  if (opts.use === "translate") want.push("translate");
+  if (opts.use === "reasoning") want.push("thinking");
   if (opts.tools) want.push("tools");
   if (opts.thinking) want.push("thinking");
   if (opts.use === "chat" && want.length === 0) want.push("chat");
