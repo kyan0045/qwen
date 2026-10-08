@@ -9,12 +9,19 @@ export const DASHSCOPE_CHINA_BASE_URL = "https://dashscope.aliyuncs.com/compatib
 
 function dashscopeExtras(body: Record<string, unknown>, req: ChatRequest): void {
   const extras: Record<string, unknown> = {};
+  let enableThinking: boolean | undefined;
   if (req.thinking !== undefined) {
+    enableThinking = req.thinking;
     extras.enable_thinking = req.thinking;
   } else if (req.thinkingBudget !== undefined) {
+    enableThinking = true;
     extras.enable_thinking = true;
   }
-  if (req.thinkingBudget !== undefined) extras.thinking_budget = req.thinkingBudget;
+  // thinking_budget is only valid when enable_thinking is true. Never send the
+  // contradictory { enable_thinking: false, thinking_budget: N } shape.
+  if (req.thinkingBudget !== undefined && enableThinking !== false) {
+    extras.thinking_budget = req.thinkingBudget;
+  }
   if (req.enableSearch !== undefined) extras.enable_search = req.enableSearch;
   Object.assign(body, extras);
 }

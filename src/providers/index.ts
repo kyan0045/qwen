@@ -143,7 +143,7 @@ export function resolveProvider(
     return withDefaults(config, overrides, environment);
   }
 
-  switch (wanted) {
+  switch (wanted.toLowerCase()) {
     case "dashscope":
     case "model-studio":
     case "bailian": {
@@ -234,7 +234,7 @@ export function createTransport(config: ProviderConfig): Transport {
       headers: config.headers,
     });
   }
-  if (config.name.startsWith("dashscope")) {
+  if (config.name.toLowerCase().startsWith("dashscope")) {
     return createDashScopeTransport(config);
   }
   return createOpenAICompatTransport({
@@ -250,6 +250,6 @@ export function createTransport(config: ProviderConfig): Transport {
 export function defaultModelFor(config: ProviderConfig): string | undefined {
   if (config.kind === "ollama") return "qwen3.8:27b";
   if (isOpenRouterEndpoint(config.baseURL)) return "qwen/qwen3-coder-plus";
-  if (config.name.startsWith("dashscope")) return "qwen3-coder-plus";
+  if (config.name.toLowerCase().startsWith("dashscope")) return "qwen3-coder-plus";
   return "qwen3-coder-plus";
 }

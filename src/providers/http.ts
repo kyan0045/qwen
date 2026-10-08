@@ -17,7 +17,7 @@ export function joinURL(baseURL: string, path: string): string {
   return `${base}${suffix}`;
 }
 
-function isAbortError(cause: unknown): boolean {
+export function isAbortError(cause: unknown): boolean {
   if (cause instanceof Error && cause.name === "AbortError") return true;
   return (
     typeof cause === "object" &&
@@ -42,9 +42,14 @@ export async function requestJSON<T>(opts: HttpOptions): Promise<T> {
 export async function rawRequest(opts: HttpOptions): Promise<Response> {
   const headers: Record<string, string> = {
     accept: opts.stream ? "text/event-stream" : "application/json",
-    "content-type": "application/json",
     ...(opts.headers ?? {}),
   };
+  if (
+    opts.body !== undefined &&
+    !Object.keys(headers).some((name) => name.toLowerCase() === "content-type")
+  ) {
+    headers["content-type"] = "application/json";
+  }
   const hasAuthorization = Object.keys(headers).some(
     (name) => name.toLowerCase() === "authorization",
   );
@@ -69,10 +74,12 @@ export async function rawRequest(opts: HttpOptions): Promise<Response> {
     let body: unknown;
     try {
       body = await response.clone().json();
-    } catch {
+    } catch (cause) {
+      if (isAbortError(cause)) throw cause;
       try {
         body = await response.text();
-      } catch {
+      } catch (inner) {
+        if (isAbortError(inner)) throw inner;
         body = undefined;
       }
     }
@@ -108,7 +115,7 @@ export async function* sseData(response: Response): AsyncGenerator<string> {
   const takeEvent = (force: boolean): string | undefined => {
     if (dataLines.length === 0) return undefined;
     const payload = dataLines.join("\n");
-    if (!force && payload !== "[DONE]" && !isCompleteJSON(payload)) return undefined;
+    if (!force && payload.trim() !== "[DONE]" && !isCompleteJSON(payload)) return undefined;
     dataLines = [];
     return payload;
   };
@@ -127,12 +134,12 @@ export async function* sseData(response: Response): AsyncGenerator<string> {
 
         if (line === "") {
           const payload = takeEvent(true);
-          if (payload === "[DONE]") break outer;
+          if (payload?.trim() === "[DONE]") break outer;
           if (payload !== undefined) yield payload;
         } else if (line.startsWith("data:")) {
-          dataLines.push(line.slice(5).replace(/^ /, ""));
+          dataLines.push(line.slice(5).replace(/^ +/, ""));
           const payload = takeEvent(false);
-          if (payload === "[DONE]") break outer;
+          if (payload?.trim() === "[DONE]") break outer;
           if (payload !== undefined) yield payload;
         }
       }
@@ -142,11 +149,11 @@ export async function* sseData(response: Response): AsyncGenerator<string> {
           const line = buffer.replace(/\r$/, "");
           buffer = "";
           if (line.startsWith("data:")) {
-            dataLines.push(line.slice(5).replace(/^ /, ""));
+            dataLines.push(line.slice(5).replace(/^ +/, ""));
           }
         }
         const payload = takeEvent(true);
-        if (payload !== undefined && payload !== "[DONE]") yield payload;
+        if (payload !== undefined && payload.trim() !== "[DONE]") yield payload;
         break;
       }
     }
@@ -175,6 +182,7 @@ export async function* ndjsonLines(response: Response): AsyncGenerator<string> {
         if (line.trim()) yield line;
       }
     }
+    buffer += decoder.decode();
     const tail = buffer.trim();
     if (tail) yield tail;
   } finally {
