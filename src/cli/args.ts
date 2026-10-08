@@ -65,6 +65,12 @@ function paramLimit(value: string): string {
   if (!/^(\d+(?:\.\d+)?)\s*b?$/i.test(value.trim())) {
     throw new Error(`--max-params must look like 32b (got "${value}")`);
   }
+  return value.trim();
+}
+
+function nonEmpty(name: string, value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (!value.trim()) throw new Error(`--${name} must not be empty`);
   return value;
 }
 
@@ -77,14 +83,27 @@ export function parseCliArgs(argv: string[]): CliFlags {
   });
 
   const v = values as Record<string, string | boolean | undefined>;
-  const thinking = typeof v.thinking === "boolean" ? v.thinking : undefined;
-  const noThinking = v["no-thinking"] === true;
-  const thinkingExplicit = thinking !== undefined || noThinking;
+  // Last-wins for --thinking / --no-thinking (parseArgs loses order).
+  let thinking: boolean | undefined;
+  for (const a of argv) {
+    if (a === "--thinking") thinking = true;
+    else if (a === "--no-thinking") thinking = false;
+  }
+  if (thinking === undefined) {
+    const parsed = typeof v.thinking === "boolean" ? v.thinking : undefined;
+    const noThinking = v["no-thinking"] === true;
+    if (parsed !== undefined || noThinking) thinking = noThinking ? false : parsed;
+  }
 
-  const use = v.use as CliFlags["use"] | undefined;
-  if (use && !["chat", "coding", "reasoning", "translate", "vision", "embed"].includes(use)) {
+  const useRaw = v.use as string | undefined;
+  const use = useRaw as CliFlags["use"] | undefined;
+  if (
+    useRaw !== undefined &&
+    (!useRaw.trim() ||
+      !["chat", "coding", "reasoning", "translate", "vision", "embed"].includes(useRaw))
+  ) {
     throw new Error(
-      `--use must be one of chat, coding, reasoning, translate, vision, embed (got "${use}")`,
+      `--use must be one of chat, coding, reasoning, translate, vision, embed (got "${useRaw}")`,
     );
   }
 
@@ -97,11 +116,15 @@ export function parseCliArgs(argv: string[]): CliFlags {
     local: v.local === true,
   };
 
-  if (typeof v.model === "string") flags.model = v.model;
-  if (typeof v.provider === "string") flags.provider = v.provider;
-  if (typeof v.system === "string") flags.system = v.system;
-  if (typeof v.prompt === "string") flags.prompt = v.prompt;
-  if (thinkingExplicit) flags.thinking = noThinking ? false : thinking;
+  const model = nonEmpty("model", v.model as string | undefined);
+  if (model !== undefined) flags.model = model;
+  const provider = nonEmpty("provider", v.provider as string | undefined);
+  if (provider !== undefined) flags.provider = provider;
+  const system = nonEmpty("system", v.system as string | undefined);
+  if (system !== undefined) flags.system = system;
+  const prompt = nonEmpty("prompt", v.prompt as string | undefined);
+  if (prompt !== undefined) flags.prompt = prompt;
+  if (thinking !== undefined) flags.thinking = thinking;
   const budget = num("thinking-budget", v["thinking-budget"] as string | undefined, {
     integer: true,
     min: 0,
@@ -119,6 +142,9 @@ export function parseCliArgs(argv: string[]): CliFlags {
   if (typeof v["max-params"] === "string") flags.maxParams = paramLimit(v["max-params"]);
   const top = num("top", v.top as string | undefined, { integer: true, min: 1 });
   if (top !== undefined) flags.top = top;
+  if (flags.thinking === false && flags.thinkingBudget !== undefined) {
+    throw new Error("--thinking-budget requires thinking (remove --no-thinking)");
+  }
 
   return flags;
 }

@@ -41,11 +41,11 @@ function out(line: string): void {
 
 process.stdout.on("error", (error: NodeJS.ErrnoException) => {
   if (error.code === "EPIPE") process.exit(0);
-  throw error;
+  process.exitCode = 1;
 });
 process.stderr.on("error", (error: NodeJS.ErrnoException) => {
   if (error.code === "EPIPE") process.exit(0);
-  throw error;
+  process.exitCode = 1;
 });
 
 function err(line: string): void {
@@ -53,11 +53,12 @@ function err(line: string): void {
 }
 
 export function resolveChatTarget(flags: CliFlags): { provider?: string; model: string } {
+  const provider = flags.provider ?? (flags.local ? "ollama" : undefined);
+  if (flags.model) return { provider, model: flags.model };
   return {
-    provider: flags.provider ?? (flags.local ? "ollama" : undefined),
-    model:
-      flags.model ??
-      recommend({ use: flags.use ?? "chat", local: flags.local, maxParams: flags.maxParams }).id,
+    provider,
+    model: recommend({ use: flags.use ?? "chat", local: flags.local, maxParams: flags.maxParams })
+      .id,
   };
 }
 
@@ -70,10 +71,14 @@ async function runChat(flags: CliFlags): Promise<number> {
   if (!userText) {
     return runRepl(
       {
-        client: new Qwen({ provider: target.provider as never, model: flags.model }),
-        model: flags.model,
+        client: new Qwen({ provider: target.provider as never, model: target.model }),
+        model: target.model,
         system: flags.system,
         thinking: flags.thinking,
+        thinkingBudget: flags.thinkingBudget,
+        enableSearch: flags.enableSearch,
+        temperature: flags.temperature,
+        maxTokens: flags.maxTokens,
       },
       out,
     ).then(() => 0);
@@ -167,51 +172,57 @@ export async function main(argv: string[]): Promise<number> {
   const command = flags.positionals[0];
 
   if (flags.help || command === "help") {
-    out(USAGE);
-    return 0;
+    if (command !== "help" || flags.positionals.length === 1) {
+      out(USAGE);
+      return 0;
+    }
   }
 
   if (flags.positionals.length === 0 && !flags.prompt) {
-    if (flags.json || flags.local || flags.use) {
-      if (flags.use || flags.maxParams || flags.top) return runRecommend(flags, out);
-      return runModels(flags, out);
-    }
+    if (flags.use || flags.maxParams || flags.top) return runRecommend(flags, out);
+    if (flags.json || flags.local) return runModels(flags, out);
   }
 
-  switch (command) {
-    case "models":
-      return runModels({ ...flags, positionals: flags.positionals.slice(1) }, out);
-    case "recommend":
-      return runRecommend({ ...flags, positionals: flags.positionals.slice(1) }, out);
-    case "config":
-      return runConfig(flags, out);
-    case "pull": {
-      const tag = flags.positionals[1];
-      if (!tag) {
-        err("usage: qwen pull <tag>   e.g. qwen pull qwen3.8:27b");
-        return 2;
+  // Subcommand names double as ordinary chat words: only dispatch when they are
+  // the sole positional (pull takes exactly one arg). Otherwise fall through
+  // to chat so `qwen models are great` chats instead of listing the catalog.
+  if (flags.positionals.length <= 1 || command === "pull") {
+    switch (command) {
+      case "models":
+        return runModels({ ...flags, positionals: flags.positionals.slice(1) }, out);
+      case "recommend":
+        return runRecommend({ ...flags, positionals: flags.positionals.slice(1) }, out);
+      case "config":
+        return runConfig(flags, out);
+      case "pull": {
+        const tag = flags.positionals[1];
+        if (!tag) {
+          err("usage: qwen pull <tag>   e.g. qwen pull qwen3.8:27b");
+          return 2;
+        }
+        const client = new Qwen({ provider: "ollama" });
+        let last = "";
+        await client.pullModel(tag, {
+          onProgress(p) {
+            const label =
+              p.total && p.completed !== undefined
+                ? `${p.status} ${Math.round((p.completed / p.total) * 100)}%`
+                : p.status;
+            if (label !== last) {
+              last = label;
+              process.stderr.write(`\r${label.padEnd(60)}`);
+            }
+          },
+        });
+        process.stderr.write("\n");
+        out(`pulled ${tag}`);
+        return 0;
       }
-      const client = new Qwen({ provider: "ollama" });
-      let last = "";
-      await client.pullModel(tag, {
-        onProgress(p) {
-          const label =
-            p.total && p.completed !== undefined
-              ? `${p.status} ${Math.round((p.completed / p.total) * 100)}%`
-              : p.status;
-          if (label !== last) {
-            last = label;
-            process.stderr.write(`\r${label.padEnd(60)}`);
-          }
-        },
-      });
-      process.stderr.write("\n");
-      out(`pulled ${tag}`);
-      return 0;
+      default:
+        break;
     }
-    default:
-      return runChat(flags);
   }
+  return runChat(flags);
 }
 
 const entryPoint = process.argv[1];

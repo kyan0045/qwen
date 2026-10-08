@@ -10,8 +10,11 @@ function seconds(ms: number): string {
  * just wall time.
  */
 export function formatStats(model: string, usage: Usage | undefined, elapsedMs: number): string {
-  if (!usage) return `[${model} · ${seconds(elapsedMs)} total]`;
+  const label = model?.trim() ? model : "(unknown model)";
+  if (!usage) return `[${label} · ${seconds(elapsedMs)} total]`;
+  const promptTokens = Number.isFinite(usage.promptTokens) ? usage.promptTokens : 0;
+  const completionTokens = Number.isFinite(usage.completionTokens) ? usage.completionTokens : 0;
   const elapsed = Math.max(elapsedMs, 1);
-  const perSecond = (usage.completionTokens / (elapsed / 1000)).toFixed(1);
-  return `[${model} · prompt ${usage.promptTokens} · completion ${usage.completionTokens} · ${perSecond} tokens/s · ${seconds(elapsedMs)} total]`;
+  const perSecond = (completionTokens / (elapsed / 1000)).toFixed(1);
+  return `[${label} · prompt ${promptTokens} · completion ${completionTokens} · ${perSecond} tokens/s · ${seconds(elapsedMs)} total]`;
 }
