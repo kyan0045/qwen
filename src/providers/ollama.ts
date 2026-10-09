@@ -1,5 +1,5 @@
 import { APIError, ConfigurationError } from "../errors";
-import { modelRefId, modelRefOllama } from "../types";
+import { modelRefOllama } from "../types";
 import type {
   ChatChunk,
   ChatRequest,
@@ -14,7 +14,7 @@ import type {
   ToolCall,
   Usage,
 } from "../types";
-import { isAbortError, ndjsonLines, rawRequest, requestJSON } from "./http";
+import { effectiveSignal, isAbortError, ndjsonLines, rawRequest, requestJSON } from "./http";
 import type { CallOptions, Transport } from "./types";
 
 interface OllamaToolCall {
@@ -140,10 +140,12 @@ function buildBody(req: ChatRequest, stream: boolean): Record<string, unknown> {
 }
 
 function parseFinishReason(raw: unknown): FinishReason {
-  const value = raw === undefined || raw === null ? "stop" : String(raw);
+  if (raw === undefined || raw === null) return "stop";
+  const value = String(raw);
   if (value === "length") return "length";
   if (value === "tool_calls") return "tool_calls";
-  return "stop";
+  if (value === "stop") return "stop";
+  return null;
 }
 
 function toToolCalls(raw: OllamaToolCall[] | undefined): ToolCall[] | undefined {
@@ -194,8 +196,18 @@ export interface OllamaTransportOptions {
 export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
   const headerBag = (): Record<string, string> => ({ ...(opts.headers ?? {}) });
 
+  const requireModel = (model: ChatRequest["model"] | EmbedRequest["model"], what: string) => {
+    if (model === undefined) {
+      throw new ConfigurationError(
+        `The Ollama transport requires ${what}. Pass model to the call or set a default on the client.`,
+      );
+    }
+  };
+
   const transport: Transport = {
     async chat(req: ChatRequest, call?: CallOptions): Promise<ChatResponse> {
+      requireModel(req.model, "req.model");
+      const signal = effectiveSignal(call);
       const response = await rawRequest({
         baseURL: opts.baseURL,
         path: "/api/chat",
@@ -203,7 +215,7 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         apiKey: opts.apiKey,
         headers: headerBag(),
         body: buildBody(req, false),
-        signal: call?.signal,
+        signal,
       });
       let payload: OllamaChatPayload & { error?: string };
       try {
@@ -217,7 +229,7 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
       }
       return {
         id: payload.created_at ?? "",
-        model: payload.model ?? modelRefId(req.model) ?? "",
+        model: payload.model ?? modelRefOllama(req.model) ?? "",
         message: messageFromPayload(payload.message),
         finishReason: parseFinishReason(payload.done_reason),
         usage: usageFromPayload(payload),
@@ -226,6 +238,8 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
     },
 
     async *chatStream(req: ChatRequest, call?: CallOptions): AsyncIterable<ChatChunk> {
+      requireModel(req.model, "req.model");
+      const signal = effectiveSignal(call);
       const response = await rawRequest({
         baseURL: opts.baseURL,
         path: "/api/chat",
@@ -233,11 +247,12 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         apiKey: opts.apiKey,
         headers: headerBag(),
         body: buildBody(req, true),
-        signal: call?.signal,
+        signal,
         stream: true,
       });
-      for await (const line of ndjsonLines(response)) {
-        call?.signal?.throwIfAborted?.();
+      let yielded = 0;
+      for await (const line of ndjsonLines(response, signal)) {
+        signal?.throwIfAborted?.();
         let payload: OllamaChatPayload & { error?: string };
         try {
           payload = JSON.parse(line) as OllamaChatPayload & { error?: string };
@@ -247,6 +262,7 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         if (typeof payload.error === "string" && payload.error) {
           throw new APIError(payload.error, { body: payload });
         }
+        yielded += 1;
         const delta: ChatChunk["delta"] = {};
         const content = payload.message?.content;
         if (content) delta.content = content;
@@ -265,7 +281,7 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         }
         const chunk: ChatChunk = {
           id: payload.created_at ?? "",
-          model: payload.model ?? modelRefId(req.model) ?? "",
+          model: payload.model ?? modelRefOllama(req.model) ?? "",
           delta,
           finishReason: payload.done ? parseFinishReason(payload.done_reason) : null,
           raw: payload,
@@ -273,9 +289,16 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         if (payload.done) chunk.usage = usageFromPayload(payload);
         yield chunk;
       }
+      if (yielded === 0) {
+        throw new APIError(
+          "Empty or invalid stream from Ollama provider: no usable events received",
+        );
+      }
     },
 
     async embed(req: EmbedRequest, call?: CallOptions): Promise<EmbedResponse> {
+      requireModel(req.model, "req.model");
+      const signal = effectiveSignal(call);
       const payload = await requestJSON<{
         embeddings?: number[][];
         embedding?: number[];
@@ -292,7 +315,7 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
           truncate: true,
           ...(req.dimensions !== undefined ? { dimensions: req.dimensions } : {}),
         },
-        signal: call?.signal,
+        signal,
       });
       let rows = payload.embeddings;
       if (!rows && Array.isArray(payload.embedding)) rows = [payload.embedding];
@@ -318,7 +341,7 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         method: "GET",
         apiKey: opts.apiKey,
         headers: headerBag(),
-        signal: call?.signal,
+        signal: effectiveSignal(call),
       });
       return (Array.isArray(payload.models) ? payload.models : []).map((item) => {
         const m = (item ?? {}) as Record<string, unknown>;
@@ -343,6 +366,7 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
       tag: string,
       opts2?: CallOptions & { onProgress?: (p: PullProgress) => void },
     ): Promise<void> {
+      const signal = effectiveSignal(opts2);
       const response = await rawRequest({
         baseURL: opts.baseURL,
         path: "/api/pull",
@@ -350,11 +374,11 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         apiKey: opts.apiKey,
         headers: headerBag(),
         body: { name: tag, stream: true },
-        signal: opts2?.signal,
+        signal,
         stream: true,
       });
-      for await (const line of ndjsonLines(response)) {
-        opts2?.signal?.throwIfAborted?.();
+      for await (const line of ndjsonLines(response, signal)) {
+        signal?.throwIfAborted?.();
         let payload: PullProgress & { error?: string };
         try {
           payload = JSON.parse(line) as PullProgress & { error?: string };

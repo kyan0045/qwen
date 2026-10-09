@@ -1,4 +1,4 @@
-import { errorFromCause, errorFromResponse } from "../errors";
+import { ConnectionError, errorFromCause, errorFromResponse } from "../errors";
 
 export interface HttpOptions {
   baseURL: string;
@@ -8,6 +8,7 @@ export interface HttpOptions {
   headers?: Record<string, string>;
   body?: unknown;
   signal?: AbortSignal;
+  timeoutMs?: number;
   stream?: boolean;
 }
 
@@ -25,6 +26,27 @@ export function isAbortError(cause: unknown): boolean {
     "name" in cause &&
     (cause as { name?: unknown }).name === "AbortError"
   );
+}
+
+/**
+ * Combine a caller signal with an opt-in timeout. Verified: a timeout abort
+ * propagates with reason `TimeoutError` (not `AbortError`), which callers map
+ * to `ConnectionError`.
+ */
+export function effectiveSignal(opts?: {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}): AbortSignal | undefined {
+  if (opts?.timeoutMs !== undefined) {
+    if (!Number.isFinite(opts.timeoutMs) || opts.timeoutMs < 0) {
+      throw new ConnectionError(
+        `Invalid timeoutMs ${String(opts.timeoutMs)}. Must be a finite number >= 0.`,
+      );
+    }
+    const timeout = AbortSignal.timeout(opts.timeoutMs);
+    return opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout;
+  }
+  return opts?.signal;
 }
 
 export async function requestJSON<T>(opts: HttpOptions): Promise<T> {
@@ -58,15 +80,26 @@ export async function rawRequest(opts: HttpOptions): Promise<Response> {
   }
 
   let response: Response;
+  const signal = effectiveSignal(opts);
   try {
     response = await fetch(joinURL(opts.baseURL, opts.path), {
       method: opts.method ?? "POST",
       headers,
       body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-      signal: opts.signal,
+      signal,
     });
   } catch (cause) {
     if (isAbortError(cause)) throw cause;
+    if (
+      typeof cause === "object" &&
+      cause !== null &&
+      "name" in cause &&
+      (cause as { name?: unknown }).name === "TimeoutError"
+    ) {
+      throw new ConnectionError(`Request to ${opts.path} timed out after ${opts.timeoutMs}ms.`, {
+        cause,
+      });
+    }
     throw errorFromCause(cause);
   }
 
@@ -104,7 +137,7 @@ function isCompleteJSON(text: string): boolean {
   }
 }
 
-export async function* sseData(response: Response): AsyncGenerator<string> {
+export async function* sseData(response: Response, signal?: AbortSignal): AsyncGenerator<string> {
   const body = response.body;
   if (!body) return;
   const reader = body.getReader();
@@ -122,6 +155,7 @@ export async function* sseData(response: Response): AsyncGenerator<string> {
 
   try {
     outer: while (true) {
+      signal?.throwIfAborted();
       const { done, value } = await reader.read();
       if (done) buffer += decoder.decode();
       else buffer += decoder.decode(value, { stream: true });
@@ -163,7 +197,10 @@ export async function* sseData(response: Response): AsyncGenerator<string> {
   }
 }
 
-export async function* ndjsonLines(response: Response): AsyncGenerator<string> {
+export async function* ndjsonLines(
+  response: Response,
+  signal?: AbortSignal,
+): AsyncGenerator<string> {
   const body = response.body;
   if (!body) return;
   const reader = body.getReader();
@@ -171,6 +208,7 @@ export async function* ndjsonLines(response: Response): AsyncGenerator<string> {
   let buffer = "";
   try {
     while (true) {
+      signal?.throwIfAborted();
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });

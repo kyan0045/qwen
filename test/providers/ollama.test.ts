@@ -161,10 +161,12 @@ describe("ollama transport", () => {
   });
 
   it("refuses pull on non-ollama transports", async () => {
+    const { ConfigurationError } = await import("../../src/errors");
     const transport = createDashScopeTransport(dashscopeProviderConfig(true, "sk-test"));
     await expect(transport.pullModel("qwen3.8:27b")).rejects.toThrow(
       /only supported on the Ollama/,
     );
+    await expect(transport.pullModel("qwen3.8:27b")).rejects.toBeInstanceOf(ConfigurationError);
   });
 });
 

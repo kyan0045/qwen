@@ -133,6 +133,6 @@ describe("resolveProvider", () => {
     expect(ollama.baseURL).toBe("http://localhost:11434");
 
     const custom = resolveProvider({ name: "custom", baseURL: "example.test:8080/v1" }, {});
-    expect(custom.baseURL).toBe("http://example.test:8080/v1");
+    expect(custom.baseURL).toBe("https://example.test:8080/v1");
   });
 });

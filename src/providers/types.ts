@@ -34,6 +34,12 @@ export type ProviderInput = ProviderName | ProviderOverrides | (string & {});
 
 export interface CallOptions {
   signal?: AbortSignal;
+  /**
+   * Abort the request (including streaming reads) after this many
+   * milliseconds. Abort errors propagate as-is; a timeout abort surfaces
+   * as a `ConnectionError`.
+   */
+  timeoutMs?: number;
 }
 
 export interface Transport {

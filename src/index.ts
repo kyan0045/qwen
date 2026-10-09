@@ -4,6 +4,9 @@ export {
   chat,
   chatStream,
   say,
+  sayStream,
+  embed,
+  resolveModelName,
   type QwenOptions,
   type CallOptions,
 } from "./client";
@@ -60,6 +63,8 @@ export type {
   LocalModel,
   Message,
   MessageRole,
+  ModelRef,
+  ModelRefLike,
   PullProgress,
   TextPart,
   Tool,
@@ -68,5 +73,7 @@ export type {
   ToolChoice,
   Usage,
 } from "./types";
+
+export { modelRefId, modelRefOllama, modelRefOpenRouter } from "./types";
 
 export const VERSION = "0.1.0";
