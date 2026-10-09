@@ -1,6 +1,13 @@
 import { ConfigurationError } from "./errors";
-import { QWEN3_EMBEDDING_8B, type QwenModel, requireModel, resolveModel } from "./models";
 import {
+  QWEN3_EMBEDDING_8B,
+  type QwenModel,
+  modelsById,
+  requireModel,
+  resolveModel,
+} from "./models";
+import {
+  type CallOptions,
   type ProviderConfig,
   type ProviderInput,
   type Transport,
@@ -22,17 +29,35 @@ import type {
 } from "./types";
 
 export interface QwenOptions {
+  /** Provider name, URL, or overrides. Falls back to `QWEN_PROVIDER`, then DashScope. */
   provider?: ProviderInput;
+  /** Explicit key. Wins over `DASHSCOPE_API_KEY` / `QWEN_API_KEY`. */
   apiKey?: string;
+  /** Endpoint override. Falls back to `QWEN_BASE_URL` / provider hosts. */
   baseURL?: string;
   model?: ModelRef;
   defaultThinking?: boolean;
   headers?: Record<string, string>;
+  /** Defaults to `process.env`. Inject a record in tests. */
   env?: Record<string, string | undefined>;
+  /**
+   * Default per-request timeout in milliseconds. Overridden per call by
+   * `CallOptions.timeoutMs`.
+   */
+  timeoutMs?: number;
 }
 
-export interface CallOptions {
-  signal?: AbortSignal;
+export type { CallOptions } from "./providers";
+
+function isQwenModelShape(value: ModelRef): value is QwenModel {
+  if (typeof value === "string") return false;
+  const m = value as Partial<QwenModel>;
+  return (
+    typeof m.id === "string" &&
+    typeof m.name === "string" &&
+    typeof m.contextWindow === "number" &&
+    Array.isArray(m.capabilities)
+  );
 }
 
 export function resolveModelName(
@@ -51,13 +76,41 @@ export function resolveModelName(
   if (typeof ref === "string" && !ref.trim()) {
     throw new ConfigurationError("Model id must not be empty.");
   }
+  if (typeof ref !== "string" && (typeof ref.id !== "string" || !ref.id.trim())) {
+    throw new ConfigurationError("Model id must not be empty.");
+  }
   const supplied = typeof ref === "string" ? ref : ref.id;
-  const known = typeof ref === "string" ? resolveModel(ref) : ref;
+  const known =
+    typeof ref === "string" ? resolveModel(ref) : (modelsById.get(ref.id) ?? resolveModel(ref.id));
   if (!known) return supplied;
-  if (config.kind === "ollama") return known.ollamaTag ?? supplied;
-  if (isOpenRouterEndpoint(config.baseURL)) return known.openrouterId ?? supplied;
-  if (config.name.toLowerCase().startsWith("dashscope")) return known.dashscopeId ?? supplied;
-  return supplied;
+  if (config.kind === "ollama") {
+    if (!known.ollamaTag) {
+      throw new ConfigurationError(
+        `Model "${supplied}" has no Ollama tag and cannot be used with the Ollama provider.`,
+      );
+    }
+    return known.ollamaTag;
+  }
+  if (isOpenRouterEndpoint(config.baseURL)) {
+    if (!known.openrouterId) {
+      throw new ConfigurationError(
+        `Model "${supplied}" has no OpenRouter id and cannot be used on this endpoint.`,
+      );
+    }
+    return known.openrouterId;
+  }
+  if (
+    config.name.toLowerCase().startsWith("dashscope") ||
+    (config.baseURL?.toLowerCase().includes("dashscope.aliyuncs.com") ?? false)
+  ) {
+    if (!known.dashscopeId) {
+      throw new ConfigurationError(
+        `Model "${supplied}" has no DashScope id and cannot be used with the DashScope provider.`,
+      );
+    }
+    return known.dashscopeId;
+  }
+  return known.id ?? supplied;
 }
 
 export class Qwen {
@@ -65,6 +118,7 @@ export class Qwen {
   readonly transport: Transport;
   private readonly defaultModel?: ModelRef;
   private readonly defaultThinking?: boolean;
+  private readonly timeoutMs?: number;
 
   constructor(options: QwenOptions = {}) {
     const overrides: Record<string, unknown> = {};
@@ -81,17 +135,33 @@ export class Qwen {
     this.transport = createTransport(this.config);
     this.defaultModel = options.model;
     this.defaultThinking = options.defaultThinking;
+    this.timeoutMs = options.timeoutMs;
   }
 
   model(ref?: ModelRef): QwenModel | undefined {
     const target = ref ?? this.defaultModel;
     if (target === undefined) return undefined;
-    if (typeof target !== "string") return target as QwenModel;
-    return resolveModel(modelRefId(target) ?? "");
+    if (typeof target === "string") return resolveModel(modelRefId(target) ?? "");
+    const catalogHit = modelsById.get(target.id) ?? resolveModel(target.id);
+    if (catalogHit) return catalogHit;
+    return isQwenModelShape(target) ? target : undefined;
   }
 
   private pickModel(ref?: ModelRef): string {
-    return resolveModelName(ref ?? this.defaultModel, this.config, defaultModelFor(this.config));
+    const target = ref ?? this.defaultModel;
+    try {
+      return resolveModelName(target, this.config, defaultModelFor(this.config));
+    } catch (error) {
+      if (error instanceof ConfigurationError && target !== undefined) {
+        const known =
+          typeof target === "string"
+            ? resolveModel(target)
+            : (modelsById.get(target.id) ?? resolveModel(target.id));
+        const fallback = known ? defaultModelFor(this.config) : undefined;
+        if (fallback) return fallback;
+      }
+      throw error;
+    }
   }
 
   private prepare(req: ChatRequest): ChatRequest {
@@ -102,12 +172,18 @@ export class Qwen {
     return prepared;
   }
 
+  private withTimeout(opts?: CallOptions): CallOptions | undefined {
+    if (opts?.timeoutMs !== undefined) return opts;
+    if (this.timeoutMs === undefined) return opts;
+    return { ...opts, timeoutMs: this.timeoutMs };
+  }
+
   chat(req: ChatRequest, opts?: CallOptions): Promise<ChatResponse> {
-    return this.transport.chat(this.prepare(req), opts);
+    return this.transport.chat(this.prepare(req), this.withTimeout(opts));
   }
 
   chatStream(req: ChatRequest, opts?: CallOptions): AsyncIterable<ChatChunk> {
-    return this.transport.chatStream(this.prepare(req), opts);
+    return this.transport.chatStream(this.prepare(req), this.withTimeout(opts));
   }
 
   async say(
@@ -142,19 +218,40 @@ export class Qwen {
 
   embed(req: EmbedRequest, opts?: CallOptions): Promise<EmbedResponse> {
     const fallback = this.config.kind === "ollama" ? "qwen3-embedding:8b" : QWEN3_EMBEDDING_8B;
-    const model = resolveModelName(req.model ?? this.defaultModel ?? fallback, this.config);
-    return this.transport.embed({ ...req, model }, opts);
+    const requested = req.model ?? this.defaultModel;
+    let model: string;
+    if (requested === undefined) {
+      model = resolveModelName(fallback, this.config);
+    } else {
+      const known =
+        typeof requested === "string"
+          ? resolveModel(requested)
+          : (modelsById.get(requested.id) ?? resolveModel(requested.id));
+      if (known && !known.capabilities.includes("embed")) {
+        if (req.model !== undefined) {
+          const label =
+            typeof requested === "string" ? requested : (modelRefId(requested) ?? requested.id);
+          throw new ConfigurationError(
+            `Model "${label}" does not support embeddings. Pass an embedding model or omit model to use the default.`,
+          );
+        }
+        model = resolveModelName(fallback, this.config);
+      } else {
+        model = resolveModelName(requested, this.config);
+      }
+    }
+    return this.transport.embed({ ...req, model }, this.withTimeout(opts));
   }
 
   listLocalModels(opts?: CallOptions): Promise<LocalModel[]> {
-    return this.transport.listLocalModels(opts);
+    return this.transport.listLocalModels(this.withTimeout(opts));
   }
 
   pullModel(
     tag: string,
     opts?: CallOptions & { onProgress?: (p: PullProgress) => void },
   ): Promise<void> {
-    return this.transport.pullModel(tag, opts);
+    return this.transport.pullModel(tag, this.withTimeout(opts));
   }
 
   messages(role: Message["role"], content: Message["content"]): Message {
@@ -166,29 +263,108 @@ export function createClient(options?: QwenOptions): Qwen {
   return new Qwen(options);
 }
 
+type ClientOptions = QwenOptions & CallOptions & { provider?: ProviderInput };
+
+function splitClientOptions(
+  req: ChatRequest & Partial<ClientOptions>,
+  opts?: ClientOptions,
+): { client: Qwen; rest: ChatRequest; call?: CallOptions } {
+  const merged = { ...req, ...opts };
+  const {
+    provider,
+    apiKey,
+    baseURL,
+    model,
+    defaultThinking,
+    headers,
+    env,
+    timeoutMs,
+    signal,
+    ...rest
+  } = merged;
+  const client = new Qwen({
+    provider,
+    apiKey,
+    baseURL,
+    model,
+    defaultThinking,
+    headers,
+    env,
+    timeoutMs,
+  });
+  const call = signal !== undefined || timeoutMs !== undefined ? { signal, timeoutMs } : undefined;
+  return { client, rest: rest as ChatRequest, call };
+}
+
 export function chat(
   req: ChatRequest & { provider?: ProviderInput } & QwenOptions,
+  opts?: ClientOptions,
 ): Promise<ChatResponse> {
-  const { provider, apiKey, baseURL, model, defaultThinking, headers, env, ...rest } = req;
-  const client = new Qwen({ provider, apiKey, baseURL, model, defaultThinking, headers, env });
-  return client.chat(rest);
+  const { client, rest, call } = splitClientOptions(req, opts);
+  return client.chat(rest, call);
 }
 
 export function chatStream(
   req: ChatRequest & { provider?: ProviderInput } & QwenOptions,
+  opts?: ClientOptions,
 ): AsyncIterable<ChatChunk> {
-  const { provider, apiKey, baseURL, model, defaultThinking, headers, env, ...rest } = req;
-  const client = new Qwen({ provider, apiKey, baseURL, model, defaultThinking, headers, env });
-  return client.chatStream(rest);
+  const { client, rest, call } = splitClientOptions(req, opts);
+  return client.chatStream(rest, call);
 }
 
 export async function say(
   prompt: string,
   req: Omit<ChatRequest, "messages"> & QwenOptions = {},
+  opts?: ClientOptions,
 ): Promise<string> {
-  const { provider, apiKey, baseURL, model, defaultThinking, headers, env, ...rest } = req;
-  const client = new Qwen({ provider, apiKey, baseURL, model, defaultThinking, headers, env });
-  return client.say(prompt, rest);
+  const { client, rest, call } = splitClientOptions(
+    req as ChatRequest & Partial<ClientOptions>,
+    opts,
+  );
+  return client.say(prompt, rest, call);
+}
+
+export async function sayStream(
+  prompt: string,
+  req: Omit<ChatRequest, "messages"> & QwenOptions = {},
+  opts?: ClientOptions,
+): Promise<string> {
+  const { client, rest, call } = splitClientOptions(
+    req as ChatRequest & Partial<ClientOptions>,
+    opts,
+  );
+  return client.sayStream(prompt, rest, call);
+}
+
+export function embed(
+  req: EmbedRequest & { provider?: ProviderInput } & QwenOptions,
+  opts?: ClientOptions,
+): Promise<EmbedResponse> {
+  const merged = { ...req, ...opts };
+  const {
+    provider,
+    apiKey,
+    baseURL,
+    model,
+    defaultThinking,
+    headers,
+    env,
+    timeoutMs,
+    signal,
+    ...rest
+  } = merged;
+  const client = new Qwen({
+    provider,
+    apiKey,
+    baseURL,
+    model,
+    defaultThinking,
+    headers,
+    env,
+    timeoutMs,
+  });
+  const call = signal !== undefined || timeoutMs !== undefined ? { signal, timeoutMs } : undefined;
+  return client.embed({ ...rest, model } as EmbedRequest, call);
 }
 
 export { requireModel, resolveModel };

@@ -123,6 +123,7 @@ describe("rawRequest", () => {
       [401, AuthenticationError],
       [403, PermissionError],
       [404, NotFoundError],
+      [422, BadRequestError],
       [429, RateLimitError],
       [500, APIError],
     ];

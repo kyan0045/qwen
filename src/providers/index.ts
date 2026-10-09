@@ -55,13 +55,29 @@ export function isOpenRouterEndpoint(baseURL: string | undefined): boolean {
   }
 }
 
+function isLocalHostname(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return true;
+  if (host === "127.0.0.1" || host === "::1") return true;
+  if (host === "host.docker.internal" || host.endsWith(".docker.internal")) return true;
+  if (/^10\./.test(host) || /^192\.168\./.test(host)) return true;
+  const m172 = /^172\.(1[6-9]|2\d|3[01])\./.exec(host);
+  if (m172) return true;
+  return false;
+}
+
 function normalizeBaseURL(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
     throw new ConfigurationError("Provider baseURL must not be empty.");
   }
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)) return trimmed;
-  return `http://${trimmed}`;
+  const authority = trimmed.split("/")[0] ?? "";
+  const hostname = authority.startsWith("[")
+    ? (authority.slice(1).split("]")[0] ?? "")
+    : (authority.split(":")[0] ?? "");
+  if (isLocalHostname(hostname)) return `http://${trimmed}`;
+  return `https://${trimmed}`;
 }
 
 function withDefaults(

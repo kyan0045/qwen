@@ -85,6 +85,11 @@ export function modelRefOllama(ref: ModelRef | undefined): string | undefined {
   return typeof ref === "string" ? ref : (ref.ollamaTag ?? ref.id);
 }
 
+export function modelRefOpenRouter(ref: ModelRef | undefined): string | undefined {
+  if (ref === undefined) return undefined;
+  return typeof ref === "string" ? ref : (ref.openrouterId ?? ref.id);
+}
+
 export interface ChatRequest {
   model?: ModelRef;
   messages: Message[];
@@ -104,7 +109,14 @@ export interface ChatRequest {
     json_schema?: Record<string, unknown>;
   };
   thinking?: boolean;
+  /**
+   * Cap the reasoning token budget. Implies thinking on when `thinking` is
+   * unset; ignored when `thinking` is false. Only DashScope sends the value
+   * (`thinking_budget`); Ollama maps any budget to `think: true` and generic
+   * OpenAI-compatible hosts drop it.
+   */
   thinkingBudget?: number;
+  /** DashScope web search plugin. Dropped by Ollama and generic hosts. */
   enableSearch?: boolean;
 }
 
@@ -131,7 +143,7 @@ export interface ChatChunk {
 }
 
 export interface EmbedRequest {
-  model?: string;
+  model?: ModelRef;
   input: string | string[];
   dimensions?: number;
   user?: string;

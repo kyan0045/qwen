@@ -1,4 +1,4 @@
-import { APIError } from "../errors";
+import { APIError, ConfigurationError } from "../errors";
 import { modelRefId } from "../types";
 import type {
   ChatChunk,
@@ -13,7 +13,7 @@ import type {
   ToolCallDelta,
   Usage,
 } from "../types";
-import { isAbortError, rawRequest, requestJSON, sseData } from "./http";
+import { effectiveSignal, isAbortError, rawRequest, requestJSON, sseData } from "./http";
 import type { CallOptions, Transport } from "./types";
 
 function toWireMessage(m: Message): Record<string, unknown> {
@@ -161,10 +161,15 @@ function messageFromWire(raw: unknown): Message {
   return message;
 }
 
-export function parseChatResponse(payload: unknown): ChatResponse {
+export function parseChatResponse(payload: unknown, provider = "openai-compat"): ChatResponse {
   const p = (payload ?? {}) as Record<string, unknown>;
   const choices = (Array.isArray(p.choices) ? p.choices : []) as Record<string, unknown>[];
-  const choice = choices[0] ?? {};
+  const choice = choices[0];
+  if (!choice || typeof choice !== "object") {
+    throw new APIError(`Invalid chat response from ${provider} provider: missing choices[0]`, {
+      body: payload,
+    });
+  }
   return {
     id: typeof p.id === "string" ? p.id : "",
     model: typeof p.model === "string" ? p.model : "",
@@ -236,13 +241,18 @@ export function createOpenAICompatTransport(opts: OpenAICompatOptions): Transpor
       apiKey: opts.apiKey,
       headers: headers(),
       body,
-      signal: call?.signal,
+      signal: effectiveSignal(call),
       stream,
     });
   }
 
   return {
     async chat(req, call) {
+      if (req.model === undefined) {
+        throw new ConfigurationError(
+          `The ${opts.name} transport requires req.model. Pass model to the call or set a default on the client.`,
+        );
+      }
       const response = await send(req, false, call);
       let payload: unknown;
       try {
@@ -251,28 +261,46 @@ export function createOpenAICompatTransport(opts: OpenAICompatOptions): Transpor
         if (isAbortError(cause)) throw cause;
         throw new APIError(`Invalid JSON response from ${opts.name} provider`, { cause });
       }
-      return parseChatResponse(payload);
+      return parseChatResponse(payload, opts.name);
     },
 
     async *chatStream(req, call) {
+      if (req.model === undefined) {
+        throw new ConfigurationError(
+          `The ${opts.name} transport requires req.model. Pass model to the call or set a default on the client.`,
+        );
+      }
       const response = await send(req, true, call);
-      for await (const data of sseData(response)) {
-        call?.signal?.throwIfAborted?.();
+      const signal = effectiveSignal(call);
+      let yielded = 0;
+      for await (const data of sseData(response, signal)) {
+        signal?.throwIfAborted?.();
         let payload: unknown;
         try {
           payload = JSON.parse(data);
         } catch {
           continue;
         }
+        yielded += 1;
         yield parseChunk(payload);
+      }
+      if (yielded === 0) {
+        throw new APIError(
+          `Empty or invalid stream from ${opts.name} provider: no usable events received`,
+        );
       }
     },
 
     async embed(req, call) {
+      if (req.model === undefined) {
+        throw new ConfigurationError(
+          `The ${opts.name} transport requires req.model. Pass model to the call or set a default on the client.`,
+        );
+      }
       const body: Record<string, unknown> = {
         input: req.input,
       };
-      if (req.model) body.model = req.model;
+      if (req.model) body.model = modelRefId(req.model) ?? req.model;
       if (req.dimensions !== undefined) body.dimensions = req.dimensions;
       if (req.user !== undefined) body.user = req.user;
       if (opts.mapEmbedBody) opts.mapEmbedBody(body, req);
@@ -286,13 +314,18 @@ export function createOpenAICompatTransport(opts: OpenAICompatOptions): Transpor
         apiKey: opts.apiKey,
         headers: headers(),
         body,
-        signal: call?.signal,
+        signal: effectiveSignal(call),
       });
       const rows = Array.isArray(payload.data)
         ? payload.data
             .map((item) => (item as { embedding?: unknown }).embedding)
             .filter((x): x is number[] => Array.isArray(x))
         : [];
+      if (rows.length === 0) {
+        throw new APIError(`Invalid embedding response from ${opts.name} provider`, {
+          body: payload,
+        });
+      }
       return {
         embeddings: rows,
         dimensions: rows[0]?.length ?? 0,
@@ -308,7 +341,7 @@ export function createOpenAICompatTransport(opts: OpenAICompatOptions): Transpor
         method: "GET",
         apiKey: opts.apiKey,
         headers: headers(),
-        signal: call?.signal,
+        signal: effectiveSignal(call),
       });
       return (Array.isArray(payload.data) ? payload.data : []).map((item) => {
         const m = (item ?? {}) as Record<string, unknown>;
@@ -321,7 +354,9 @@ export function createOpenAICompatTransport(opts: OpenAICompatOptions): Transpor
     },
 
     async pullModel(tag) {
-      throw new Error(`Pulling models is only supported on the Ollama provider. Requested: ${tag}`);
+      throw new ConfigurationError(
+        `Pulling models is only supported on the Ollama provider. Requested: ${tag}`,
+      );
     },
   };
 }
