@@ -9,6 +9,31 @@ breaking changes.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-09
+
+### Added
+
+- Opt-in `timeoutMs` on `CallOptions` and `QwenOptions`, covering fetch and streaming reads.
+- Top-level `sayStream` and `embed` helpers; client options accepted as a second argument.
+- Exported `ModelRef` helpers and `resolveModelName`.
+- `Qwen3-Coder-Next` catalog size (`80B-A3B`).
+
+### Changed
+
+- Catalog models resolve to canonical provider wire IDs; entries without a mapping throw.
+- Default chat recommendation follows the configured provider.
+- `embed()` rejects chat models passed explicitly.
+- Empty responses and event-less streams throw `APIError`.
+- CLI accepts `t`/`m` units in `--max-params` and validates flag combinations.
+
+### Removed
+
+- LiveTranslate entry and `translate` capability: the model is WebSocket-only and no transport drives it.
+
+### Fixed
+
+- Installed CLI binary resolved through the npm symlink (previously a silent no-op).
+
 ## [0.1.0] - 2026-09-26
 
 Initial public release.
