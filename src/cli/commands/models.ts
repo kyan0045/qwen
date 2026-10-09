@@ -37,7 +37,8 @@ export async function runModels(flags: CliFlags, out: (s: string) => void): Prom
     const { Qwen } = await import("../../client");
     const client = new Qwen({ provider: "ollama", model: "qwen3.8:27b" });
     const local = await client.listLocalModels();
-    const known = local.filter((l) => l.tag.startsWith("qwen") || l.tag.startsWith("qwq"));
+    let known = local.filter((l) => l.tag.startsWith("qwen") || l.tag.startsWith("qwq"));
+    if (flags.use === "embed") known = known.filter((l) => l.tag.includes("embed"));
     if (flags.json) {
       out(JSON.stringify(known, null, 2));
       return 0;

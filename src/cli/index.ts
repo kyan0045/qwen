@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { stdin as input } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -32,11 +32,24 @@ async function readStdin(): Promise<string> {
   if (input.isTTY) return "";
   const chunks: Buffer[] = [];
   for await (const chunk of input) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks).toString("utf8").trim();
+  return Buffer.concat(chunks)
+    .toString("utf8")
+    .replace(/\r?\n$/, "");
 }
 
 function out(line: string): void {
   process.stdout.write(`${line}\n`);
+}
+
+/** Sync `stdout.write` wrapper: returns false when the pipe is closed. */
+function writeStdout(text: string): boolean {
+  try {
+    process.stdout.write(text);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "EPIPE") return false;
+    throw error;
+  }
 }
 
 process.stdout.on("error", (error: NodeJS.ErrnoException) => {
@@ -55,20 +68,29 @@ function err(line: string): void {
 export function resolveChatTarget(flags: CliFlags): { provider?: string; model: string } {
   const provider = flags.provider ?? (flags.local ? "ollama" : undefined);
   if (flags.model) return { provider, model: flags.model };
+  const ollama = provider === "ollama";
   return {
     provider,
-    model: recommend({ use: flags.use ?? "chat", local: flags.local, maxParams: flags.maxParams })
-      .id,
+    model: recommend({
+      use: flags.use ?? "chat",
+      local: ollama || flags.local,
+      includeCloud: !ollama,
+      maxParams: flags.maxParams,
+    }).id,
   };
 }
 
 async function runChat(flags: CliFlags): Promise<number> {
   const target = resolveChatTarget(flags);
+  if (flags.prompt !== undefined && flags.positionals.length > 0) {
+    err("error: --prompt cannot be combined with a positional prompt");
+    return 2;
+  }
   const promptFromArgs = flags.prompt ?? flags.positionals.join(" ").trim();
   const piped = await readStdin();
   const userText = promptFromArgs || piped;
 
-  if (!userText) {
+  if (!userText.trim()) {
     return runRepl(
       {
         client: new Qwen({ provider: target.provider as never, model: target.model }),
@@ -125,24 +147,26 @@ async function runChat(flags: CliFlags): Promise<number> {
   const spinner = startSpinner();
   const started = Date.now();
   let streamed: { answer: string; reasoning: string; usage?: Usage };
+  let pipeOpen = true;
   try {
     streamed = await collectStreamText(client.chatStream(request), (text) => {
       spinner.stop();
-      if (!flags.quiet) process.stdout.write(text);
+      if (!flags.quiet && pipeOpen) pipeOpen = writeStdout(text);
     });
   } finally {
     spinner.stop();
   }
+  if (!pipeOpen) return 0;
   answer = streamed.answer;
   reasoning = streamed.reasoning;
   const sentModel = resolveModelName(request.model, client.config);
   const stats = formatStats(sentModel, streamed.usage, Date.now() - started);
 
   if (flags.quiet) {
-    process.stdout.write(answer);
-    if (answer && !answer.endsWith("\n")) process.stdout.write("\n");
+    if (!writeStdout(answer)) return 0;
+    if (answer && !answer.endsWith("\n")) writeStdout("\n");
   } else {
-    if (answer && !answer.endsWith("\n")) process.stdout.write("\n");
+    if (answer && !answer.endsWith("\n")) writeStdout("\n");
     if (reasoning) {
       process.stderr.write(
         `\n[${reasoning.trim().split("\n").length} lines of reasoning hidden (pass --quiet to hide this note)]\n`,
@@ -176,6 +200,20 @@ export async function main(argv: string[]): Promise<number> {
       out(USAGE);
       return 0;
     }
+    const sub = flags.positionals[1];
+    if (
+      flags.positionals.length === 2 &&
+      (sub === "models" || sub === "recommend" || sub === "config" || sub === "pull")
+    ) {
+      out(`usage: qwen ${sub} ${sub === "pull" ? "<tag>" : "[options]"}   (see qwen --help)`);
+      return 0;
+    }
+    if (flags.positionals.length === 2) {
+      err(`unknown help topic "${sub ?? ""}"`);
+      err("");
+      err(USAGE);
+      return 2;
+    }
   }
 
   if (flags.positionals.length === 0 && !flags.prompt) {
@@ -183,9 +221,9 @@ export async function main(argv: string[]): Promise<number> {
     if (flags.json || flags.local) return runModels(flags, out);
   }
 
-  // Subcommand names double as ordinary chat words: only dispatch when they are
-  // the sole positional (pull takes exactly one arg). Otherwise fall through
-  // to chat so `qwen models are great` chats instead of listing the catalog.
+  // Subcommand names double as ordinary chat words: models/recommend/config
+  // only dispatch as the sole positional, so `qwen models are great` chats.
+  // `pull` always dispatches and validates its own arity.
   if (flags.positionals.length <= 1 || command === "pull") {
     switch (command) {
       case "models":
@@ -195,8 +233,8 @@ export async function main(argv: string[]): Promise<number> {
       case "config":
         return runConfig(flags, out);
       case "pull": {
-        const tag = flags.positionals[1];
-        if (!tag) {
+        const [_, tag, extra] = flags.positionals;
+        if (!tag || extra !== undefined) {
           err("usage: qwen pull <tag>   e.g. qwen pull qwen3.8:27b");
           return 2;
         }
@@ -222,11 +260,27 @@ export async function main(argv: string[]): Promise<number> {
         break;
     }
   }
+  if (flags.top !== undefined) {
+    err("error: --top only applies to recommend (no prompt expected)");
+    return 2;
+  }
+  if (flags.json && flags.quiet) {
+    err("error: --json and --quiet cannot be combined for chat output");
+    return 2;
+  }
   return runChat(flags);
 }
 
 const entryPoint = process.argv[1];
-if (entryPoint && resolve(entryPoint) === fileURLToPath(import.meta.url)) {
+let invokedAsCli = false;
+if (entryPoint) {
+  try {
+    invokedAsCli = realpathSync(resolve(entryPoint)) === fileURLToPath(import.meta.url);
+  } catch {
+    invokedAsCli = resolve(entryPoint) === fileURLToPath(import.meta.url);
+  }
+}
+if (invokedAsCli) {
   main(process.argv.slice(2))
     .then((code) => {
       process.exitCode = code;
