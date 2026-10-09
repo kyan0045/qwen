@@ -13,7 +13,7 @@ export interface CliFlags {
   json?: boolean;
   quiet?: boolean;
   local?: boolean;
-  use?: "chat" | "coding" | "reasoning" | "translate" | "vision" | "embed";
+  use?: "chat" | "coding" | "reasoning" | "vision" | "embed";
   maxParams?: string;
   top?: number;
   help?: boolean;
@@ -62,10 +62,10 @@ function num(
 }
 
 function paramLimit(value: string): string {
-  if (!/^(\d+(?:\.\d+)?)\s*b?$/i.test(value.trim())) {
+  if (!/^(\d+(?:\.\d+)?)\s*(tb|t|mb|m|b)?$/i.test(value.trim())) {
     throw new Error(`--max-params must look like 32b (got "${value}")`);
   }
-  return value.trim();
+  return value.trim().toLowerCase();
 }
 
 function nonEmpty(name: string, value: string | undefined): string | undefined {
@@ -79,7 +79,7 @@ export function parseCliArgs(argv: string[]): CliFlags {
     args: argv,
     options: OPTIONS as never,
     allowPositionals: true,
-    allowNegative: true,
+    allowNegative: false,
   });
 
   const v = values as Record<string, string | boolean | undefined>;
@@ -99,11 +99,10 @@ export function parseCliArgs(argv: string[]): CliFlags {
   const use = useRaw as CliFlags["use"] | undefined;
   if (
     useRaw !== undefined &&
-    (!useRaw.trim() ||
-      !["chat", "coding", "reasoning", "translate", "vision", "embed"].includes(useRaw))
+    (!useRaw.trim() || !["chat", "coding", "reasoning", "vision", "embed"].includes(useRaw))
   ) {
     throw new Error(
-      `--use must be one of chat, coding, reasoning, translate, vision, embed (got "${useRaw}")`,
+      `--use must be one of chat, coding, reasoning, vision, embed (got "${useRaw}")`,
     );
   }
 
@@ -147,8 +146,4 @@ export function parseCliArgs(argv: string[]): CliFlags {
   }
 
   return flags;
-}
-
-export function formatUnknown(flag: string): string {
-  return `Unknown flag: ${flag}`;
 }

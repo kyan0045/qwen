@@ -22,7 +22,7 @@ export interface ReplOptions {
 }
 
 export async function runRepl(options: ReplOptions, out: (s: string) => void): Promise<void> {
-  const rl = createInterface({ input, output, terminal: true });
+  const rl = createInterface({ input, output, terminal: output.isTTY === true });
   const history: Message[] = [];
   if (options.system) history.push({ role: "system", content: options.system });
 
@@ -45,7 +45,9 @@ export async function runRepl(options: ReplOptions, out: (s: string) => void): P
     }
     if (!line) continue;
 
-    if (line.startsWith("/")) {
+    if (line.startsWith("//")) {
+      line = line.slice(1);
+    } else if (line.startsWith("/")) {
       const [cmd, ...rest] = line.split(/\s+/);
       const arg = rest.join(" ");
       switch (cmd) {
@@ -66,6 +68,10 @@ export async function runRepl(options: ReplOptions, out: (s: string) => void): P
             out(`model: ${current?.name ?? String(model ?? "default")}`);
             break;
           }
+          if (/\s/.test(arg)) {
+            out("usage: /model <id> (no spaces)");
+            break;
+          }
           model = arg;
           current = resolveModel(arg);
           out(`model: ${current?.name ?? arg}`);
@@ -78,11 +84,13 @@ export async function runRepl(options: ReplOptions, out: (s: string) => void): P
             thinking = true;
           } else if (value === "off" || value === "false" || value === "0") {
             thinking = false;
+          } else if (value === "auto" || value === "default") {
+            thinking = undefined;
           } else {
-            out("usage: /thinking on|off");
+            out("usage: /thinking on|off|auto");
             break;
           }
-          out(`thinking: ${thinking ? "on" : "off"}`);
+          out(`thinking: ${thinking === undefined ? "auto" : thinking ? "on" : "off"}`);
           break;
         }
         case "/system":
@@ -94,7 +102,7 @@ export async function runRepl(options: ReplOptions, out: (s: string) => void): P
           out(options.system ? "system prompt set" : "system prompt cleared");
           break;
         default:
-          out(`Unknown command ${cmd}. Try /help.`);
+          out(`Unknown command ${cmd}. Try /help (or start the line with // to send it).`);
       }
       continue;
     }
@@ -125,8 +133,11 @@ export async function runRepl(options: ReplOptions, out: (s: string) => void): P
         defaultModelFor(options.client.config),
       );
       process.stderr.write(`\n${formatStats(sentModel, usage, Date.now() - started)}\n`);
-      if (!answer && !reasoning) {
+      if (!answer.trim() && !reasoning) {
         history.splice(mark, 1);
+      } else if (!answer.trim()) {
+        history.splice(mark, 1);
+        out("(empty answer discarded)");
       } else if (reasoning) {
         history.push({ role: "assistant", content: answer, reasoningContent: reasoning });
       } else {
