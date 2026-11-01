@@ -42,6 +42,7 @@ export {
   DASHSCOPE_INTERNATIONAL_BASE_URL,
   createTransport,
   defaultModelFor,
+  isDashScopeEndpoint,
   isOpenRouterEndpoint,
   resolveProvider,
   type ProviderConfig,
@@ -76,4 +77,4 @@ export type {
 
 export { modelRefId, modelRefOllama, modelRefOpenRouter } from "./types";
 
-export const VERSION = "0.2.0";
+export const VERSION = "0.3.0";
