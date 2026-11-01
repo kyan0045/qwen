@@ -89,7 +89,20 @@ describe("resolveProvider", () => {
 
   it("defaults openrouter endpoints to a routable model id", () => {
     const config = resolveProvider({}, { QWEN_BASE_URL: "https://openrouter.ai/api/v1" });
-    expect(defaultModelFor(config)).toBe("qwen/qwen3-coder-plus");
+    expect(defaultModelFor(config)).toBe("qwen/qwen3.8-flash");
+  });
+
+  it("keeps DashScope mapping for regional and QwenCloud base URLs", () => {
+    for (const baseURL of [
+      "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
+      "https://cn-hongkong.dashscope.aliyuncs.com/compatible-mode/v1",
+      "https://ap-southeast-1.maas.qwencloudapi.com/compatible-mode/v1",
+    ]) {
+      const config = resolveProvider({}, { QWEN_BASE_URL: baseURL });
+      expect(config.name).toBe("dashscope");
+      expect(config.baseURL).toBe(baseURL);
+      expect(config.mapRequestBody).toBeTypeOf("function");
+    }
   });
 
   it("treats a bare URL provider as OpenAI-compatible", () => {

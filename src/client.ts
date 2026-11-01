@@ -13,6 +13,7 @@ import {
   type Transport,
   createTransport,
   defaultModelFor,
+  isDashScopeEndpoint,
   isOpenRouterEndpoint,
   resolveProvider,
 } from "./providers";
@@ -99,10 +100,7 @@ export function resolveModelName(
     }
     return known.openrouterId;
   }
-  if (
-    config.name.toLowerCase().startsWith("dashscope") ||
-    (config.baseURL?.toLowerCase().includes("dashscope.aliyuncs.com") ?? false)
-  ) {
+  if (config.name.toLowerCase().startsWith("dashscope") || isDashScopeEndpoint(config.baseURL)) {
     if (!known.dashscopeId) {
       throw new ConfigurationError(
         `Model "${supplied}" has no DashScope id and cannot be used with the DashScope provider.`,

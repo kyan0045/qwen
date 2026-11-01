@@ -116,6 +116,22 @@ describe("dashscope thinking shapes", () => {
     expect(body.enable_thinking).toBe(false);
     expect(body).not.toHaveProperty("thinking_budget");
   });
+
+  it("maps reasoningEffort and preserveThinking", async () => {
+    const body = await sentBody({ reasoningEffort: "medium", preserveThinking: true });
+    expect(body.enable_thinking).toBe(true);
+    expect(body.reasoning_effort).toBe("medium");
+    expect(body.preserve_thinking).toBe(true);
+  });
+
+  it("rejects reasoningEffort combined with thinkingBudget or disabled thinking", async () => {
+    await expect(sentBody({ reasoningEffort: "low", thinkingBudget: 512 })).rejects.toThrow(
+      /cannot be combined/,
+    );
+    await expect(sentBody({ reasoningEffort: "low", thinking: false })).rejects.toThrow(
+      /requires thinking/,
+    );
+  });
 });
 
 describe("ollama streams and payloads", () => {

@@ -7,6 +7,8 @@ export interface CliFlags {
   prompt?: string;
   thinking?: boolean;
   thinkingBudget?: number;
+  reasoningEffort?: "low" | "medium" | "xhigh";
+  preserveThinking?: boolean;
   enableSearch?: boolean;
   temperature?: number;
   maxTokens?: number;
@@ -29,6 +31,8 @@ const OPTIONS = {
   thinking: { type: "boolean" },
   "no-thinking": { type: "boolean" },
   "thinking-budget": { type: "string" },
+  "reasoning-effort": { type: "string" },
+  "preserve-thinking": { type: "boolean" },
   "enable-search": { type: "boolean" },
   temperature: { type: "string", short: "t" },
   "max-tokens": { type: "string" },
@@ -129,6 +133,14 @@ export function parseCliArgs(argv: string[]): CliFlags {
     min: 0,
   });
   if (budget !== undefined) flags.thinkingBudget = budget;
+  const effort = v["reasoning-effort"] as string | undefined;
+  if (effort !== undefined) {
+    if (!["low", "medium", "xhigh"].includes(effort)) {
+      throw new Error(`--reasoning-effort must be one of low, medium, xhigh (got "${effort}")`);
+    }
+    flags.reasoningEffort = effort as "low" | "medium" | "xhigh";
+  }
+  if (v["preserve-thinking"] === true) flags.preserveThinking = true;
   if (v["enable-search"] === true) flags.enableSearch = true;
   const temperature = num("temperature", v.temperature as string | undefined);
   if (temperature !== undefined) flags.temperature = temperature;
@@ -141,8 +153,16 @@ export function parseCliArgs(argv: string[]): CliFlags {
   if (typeof v["max-params"] === "string") flags.maxParams = paramLimit(v["max-params"]);
   const top = num("top", v.top as string | undefined, { integer: true, min: 1 });
   if (top !== undefined) flags.top = top;
-  if (flags.thinking === false && flags.thinkingBudget !== undefined) {
-    throw new Error("--thinking-budget requires thinking (remove --no-thinking)");
+  if (
+    flags.thinking === false &&
+    (flags.thinkingBudget !== undefined || flags.reasoningEffort !== undefined)
+  ) {
+    throw new Error(
+      "--thinking-budget and --reasoning-effort require thinking (remove --no-thinking)",
+    );
+  }
+  if (flags.thinkingBudget !== undefined && flags.reasoningEffort !== undefined) {
+    throw new Error("--thinking-budget cannot be combined with --reasoning-effort");
   }
 
   return flags;

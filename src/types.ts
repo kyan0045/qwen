@@ -113,9 +113,21 @@ export interface ChatRequest {
    * Cap the reasoning token budget. Implies thinking on when `thinking` is
    * unset; ignored when `thinking` is false. Only DashScope sends the value
    * (`thinking_budget`); Ollama maps any budget to `think: true` and generic
-   * OpenAI-compatible hosts drop it.
+   * OpenAI-compatible hosts drop it. Cannot be combined with `reasoningEffort`.
    */
   thinkingBudget?: number;
+  /**
+   * Qwen3.8 reasoning depth. Implies thinking on when `thinking` is unset.
+   * DashScope sends `reasoning_effort`; Ollama maps any effort to
+   * `think: true`, and generic hosts drop it. Cannot be combined with
+   * `thinkingBudget`.
+   */
+  reasoningEffort?: "low" | "medium" | "xhigh";
+  /**
+   * Keep assistant `reasoningContent` from earlier turns in the model input.
+   * DashScope sends `preserve_thinking`; other providers drop it.
+   */
+  preserveThinking?: boolean;
   /** DashScope web search plugin. Dropped by Ollama and generic hosts. */
   enableSearch?: boolean;
 }

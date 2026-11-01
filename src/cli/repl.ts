@@ -16,6 +16,8 @@ export interface ReplOptions {
   system?: string;
   thinking?: boolean;
   thinkingBudget?: number;
+  reasoningEffort?: "low" | "medium" | "xhigh";
+  preserveThinking?: boolean;
   enableSearch?: boolean;
   temperature?: number;
   maxTokens?: number;
@@ -118,6 +120,8 @@ export async function runRepl(options: ReplOptions, out: (s: string) => void): P
         model,
         thinking,
         thinkingBudget: options.thinkingBudget,
+        reasoningEffort: options.reasoningEffort,
+        preserveThinking: options.preserveThinking,
         enableSearch: options.enableSearch,
         temperature: options.temperature,
         maxTokens: options.maxTokens,

@@ -134,6 +134,14 @@ describe("recommend", () => {
     expect(models).toContain(QWEN3_8_27B);
   });
 
+  it("keeps Qwen3.8 provider mappings and output limits current", () => {
+    expect(QWEN3_8_27B.dashscopeId).toBe("qwen3.8-27b");
+    expect(QWEN3_8_27B.maxOutput).toBe(131072);
+    expect(getModel("qwen3.8-omni-flash")?.maxOutput).toBe(131072);
+    expect(getModel("qwen3.8-flash-next")?.maxOutput).toBe(131072);
+    expect(getModel("qwen3.8-2.4t-a95b")?.dashscopeId).toBe("qwen3.8-2.4t-a95b");
+  });
+
   it("validates minContext values", () => {
     expect(() => recommendAll({ minContext: Number.NaN })).toThrow(/Invalid minContext/);
     expect(() => recommendAll({ minContext: -1 })).toThrow(/Invalid minContext/);

@@ -18,6 +18,8 @@ Three things nobody else on npm combines:
 
 For the full DashScope surface (images, speech, fine-tunes, assistants) use Alibaba's own [`dashscope-sdk-official`](https://www.npmjs.com/package/dashscope-sdk-official). For an agentic coding CLI see [`@qwen-code/qwen-code`](https://www.npmjs.com/package/@qwen-code/qwen-code). This package is the layer in between.
 
+Scope note: this client speaks OpenAI-compatible chat. Anthropic-compatible endpoints are not supported (use `qwen-code` for Claude Code), and `ContentPart` covers text and images only, so audio/video input for Omni models needs the official DashScope SDK or a custom transport.
+
 ## Install
 
 ```bash
@@ -87,13 +89,14 @@ for await (const chunk of qwen.chatStream({ messages: [{ role: "user", content: 
 ```ts
 await qwen.chat({
   messages,
-  thinking: true,          // Qwen3 hybrid mode on
-  thinkingBudget: 2048,    // cap the reasoning tokens (DashScope)
-  enableSearch: true,      // DashScope web search plugin
+  thinking: true,            // Qwen3 hybrid mode on
+  reasoningEffort: "medium", // Qwen3.8 depth (DashScope)
+  preserveThinking: true,    // keep earlier reasoning_content
+  enableSearch: true,        // DashScope web search plugin
 });
 ```
 
-`thinking` is mapped per provider: `enable_thinking` / `thinking_budget` on DashScope, `think` on Ollama. Generic OpenAI-compatible hosts ignore `thinking`, `thinkingBudget` and `enableSearch` unless their `mapRequestBody` handles them. A bare `thinkingBudget` implies thinking on; `thinkingBudget` is dropped when thinking is off.
+`thinking` is mapped per provider: `enable_thinking` on DashScope, `think` on Ollama. `reasoningEffort` (`low` | `medium` | `xhigh`) and `preserveThinking` are sent only on DashScope (`reasoning_effort` and `preserve_thinking`); generic OpenAI-compatible hosts drop them, and Ollama maps an effort to `think: true` but drops `preserveThinking`. A bare `thinkingBudget` or `reasoningEffort` implies thinking on. `thinkingBudget` is dropped when thinking is off, and `reasoningEffort` cannot be combined with `thinkingBudget` because DashScope rejects requests that set both.
 
 ### Embeddings
 
@@ -123,9 +126,11 @@ await say("summarise this", { provider: "ollama", model: "qwen3.8:27b" });
 
 All providers request Qwen models. The `openai` name refers to the protocol only: it has no default endpoint, so point it at a host that serves Qwen via `QWEN_BASE_URL` (or pass `baseURL` in code).
 
+DashScope also serves US (Virginia) at `https://dashscope-us.aliyuncs.com/compatible-mode/v1` and Hong Kong at `https://cn-hongkong.dashscope.aliyuncs.com/compatible-mode/v1`; QwenCloud's Singapore host is `https://ap-southeast-1.maas.qwencloudapi.com/compatible-mode/v1`. Pass any of them through `QWEN_BASE_URL` or `baseURL`: regional and workspace-dedicated `maas.aliyuncs.com` / `maas.qwencloudapi.com` hosts keep the DashScope wire-id and thinking mapping. Region keys are not interchangeable, so use a key created in the same region.
+
 ### OpenRouter
 
-Point `QWEN_BASE_URL` at `https://openrouter.ai/api/v1` and catalog IDs resolve automatically: each entry's `openrouterId` is used when the endpoint host is `openrouter.ai`, so `QWEN_BASE_URL=https://openrouter.ai/api/v1 qwen -m qwen3-coder-30b` sends `qwen/qwen3-coder-30b-a3b-instruct`. Mapped IDs are canonical rolling IDs, plus pinned dated snapshots where noted (for example `qwen/qwen3.8-max-0902`); no `:free` variants. Unknown strings pass through verbatim, and the no-model default is `qwen/qwen3-coder-plus`. A known catalog entry without a mapping for the endpoint throws instead of sending an invalid id.
+Point `QWEN_BASE_URL` at `https://openrouter.ai/api/v1` and catalog IDs resolve automatically: each entry's `openrouterId` is used when the endpoint host is `openrouter.ai`, so `QWEN_BASE_URL=https://openrouter.ai/api/v1 qwen -m qwen3-coder-30b` sends `qwen/qwen3-coder-30b-a3b-instruct`. Mapped IDs are canonical rolling IDs, plus pinned dated snapshots where noted (for example `qwen/qwen3.8-max-0902`); no `:free` variants. Unknown strings pass through verbatim, and the no-model default is `qwen/qwen3.8-flash`. A known catalog entry without a mapping for the endpoint throws instead of sending an invalid id.
 
 ### Credentials: where to put your key
 
@@ -184,12 +189,14 @@ Provider selection: `-p/--provider` wins, then `-l/--local` (means Ollama), then
 qwen --thinking "explain this"              # force thinking on
 qwen --no-thinking "explain this"           # force thinking off
 qwen --thinking --thinking-budget 512 "…"   # cap reasoning tokens
+qwen --reasoning-effort medium "…"          # Qwen3.8 depth: low | medium | xhigh
+qwen --preserve-thinking "…"                # keep earlier reasoning in context
 qwen --enable-search "latest Qwen news"     # DashScope web search
 ```
 
-A bare `--thinking-budget` implies thinking on, so it is sent with thinking enabled. `--thinking-budget` is only sent when thinking is enabled, and combining `--no-thinking` with `--thinking-budget` is rejected. When no prompt is given these flags carry over into the REPL.
+A bare `--thinking-budget` or `--reasoning-effort` implies thinking on, so it is sent with thinking enabled. `--thinking-budget` and `--reasoning-effort` cannot be combined, and either one with `--no-thinking` is rejected. `--reasoning-effort` and `--preserve-thinking` affect DashScope requests; on Ollama an effort only turns thinking on. When no prompt is given these flags carry over into the REPL.
 
-`-j/--json` on `models`, `recommend`, `config` and chat for machine-readable output, `-q/--quiet` for answer-only text on stdout (the stderr stats line still prints). After each streamed answer the CLI prints the sent model id with token counts and speed (`[qwen3-coder-plus · prompt 123 · completion 45 · 15.0 tokens/s · 3.0s total]`) to stderr; `--json` responses carry `usage` in the payload instead.
+`-j/--json` on `models`, `recommend`, `config` and chat for machine-readable output, `-q/--quiet` for answer-only text on stdout (the stderr stats line still prints). After each streamed answer the CLI prints the sent model id with token counts and speed (`[qwen3.8-flash · prompt 123 · completion 45 · 15.0 tokens/s · 3.0s total]`) to stderr; `--json` responses carry `usage` in the payload instead.
 
 ## Model families covered
 
@@ -208,7 +215,7 @@ A bare `--thinking-budget` implies thinking on, so it is sent with thinking enab
 | `qwq` | 32B | always-on reasoner |
 | `qwen2.5*` | various | older generation (`legacy`, except hosted Turbo/Plus/Max which are `cloudOnly`) |
 
-Specs come from Qwen's published model cards and the Ollama library, checked in September 2026. Bare `max`/`plus`/`flash` IDs float to the latest checkpoint; prefer the dated IDs (such as `qwen3.8-max-0902`) when reproducibility matters. Omni output limits are provisional, so verify them against the upstream model page. The catalog is data: corrections and new releases are welcome as PRs. Provider model IDs, availability, and limits can change upstream; live provider behavior is not covered by the automated suite.
+Specs come from Qwen's published model cards and the Ollama library, checked in November 2026. Bare `max`/`plus`/`flash` IDs float to the latest checkpoint; prefer the dated IDs (such as `qwen3.8-max-0902`) when reproducibility matters. The catalog is data: corrections and new releases are welcome as PRs. Provider model IDs, availability, and limits can change upstream; live provider behavior is not covered by the automated suite.
 
 ## API surface
 
@@ -217,7 +224,7 @@ import {
   Qwen, createClient, chat, chatStream, say, sayStream, embed,
   resolveModelName,
   models, modelsById, getModel, resolveModel, requireModel, recommend, recommendAll,
-  resolveProvider, createTransport, defaultModelFor, isOpenRouterEndpoint,
+  resolveProvider, createTransport, defaultModelFor, isDashScopeEndpoint, isOpenRouterEndpoint,
   QwenError, AuthenticationError, RateLimitError, NotFoundError,
   QWEN3_8_27B, QWEN3_CODER_480B, QWEN3_EMBEDDING_8B, QWQ_32B,
 } from "qwen";

@@ -72,13 +72,14 @@ export const QWEN3_8_27B: QwenModel = {
   params: "27B",
   paramCount: 27,
   contextWindow: 262144,
-  maxOutput: 65536,
+  maxOutput: 131072,
   capabilities: ["chat", "thinking", "tools", "vision", "code"],
   thinking: "hybrid",
   ollamaTag: "qwen3.8:27b",
+  dashscopeId: "qwen3.8-27b",
   openrouterId: "qwen/qwen3.8-27b",
   notes:
-    "Newest stable release. Gains on coding, professional work, research and long-horizon agentic tasks.",
+    "Newest 27B release. 262144 tokens natively and up to 1M with YaRN; the hosted API serves 1M. Thinking is on by default and reasoning depth is tunable with reasoning_effort.",
 };
 
 export const QWEN3_8_FLASH: QwenModel = {
@@ -88,7 +89,7 @@ export const QWEN3_8_FLASH: QwenModel = {
   params: "125B-A6B",
   paramCount: 125,
   contextWindow: 262144,
-  maxOutput: 65536,
+  maxOutput: 131072,
   capabilities: ["chat", "thinking", "tools", "vision", "code"],
   thinking: "hybrid",
   preview: true,
@@ -143,9 +144,10 @@ export const QWEN3_8_2_4T_A95B: QwenModel = {
   capabilities: ["chat", "thinking", "code"],
   thinking: "always",
   cloudOnly: true,
+  dashscopeId: "qwen3.8-2.4t-a95b",
   openrouterId: "qwen/qwen3.8-2.4t-a95b",
   notes:
-    "Open-weight Max-class foundation checkpoint. Text only, always thinks. ~5TB of weights: data-center scale, not locally runnable in practice.",
+    "Open-weight Max-class foundation checkpoint. Text only, always thinks. 262144 tokens natively and up to 1M with YaRN; the hosted API serves 1M. ~5TB of weights: data-center scale, not locally runnable in practice.",
 };
 
 export const QWEN3_8_FLASH_API: QwenModel = {
@@ -168,14 +170,14 @@ export const QWEN3_8_OMNI_FLASH: QwenModel = {
   name: "Qwen3.8-Omni-Flash",
   family: "qwen3.8",
   contextWindow: 1000000,
-  maxOutput: 65536,
+  maxOutput: 131072,
   capabilities: ["chat", "thinking", "tools", "vision"],
   thinking: "hybrid",
   cloudOnly: true,
   dashscopeId: "qwen3.8-omni-flash",
   openrouterId: "qwen/qwen3.8-omni-flash",
   notes:
-    "Hosted omni model: text, image, audio and video understanding with text output, adjustable thinking and web search. Pinned to dashscope/openrouter id qwen3.8-omni-flash. Output limit provisional; verify against the upstream model page before relying on it.",
+    "Hosted omni model: text, image, audio and video understanding with text output, adjustable thinking and web search. 1M context, 131072 output tokens. Pinned to dashscope/openrouter id qwen3.8-omni-flash. Audio and video input are model-side capabilities; this SDK sends text and image parts only.",
 };
 
 export const QWEN3_7_MAX: QwenModel = {

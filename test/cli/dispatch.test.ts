@@ -59,8 +59,21 @@ describe("parseCliArgs edges", () => {
 
   it("rejects contradictory thinking options", () => {
     expect(() => parseCliArgs(["--no-thinking", "--thinking-budget", "512"])).toThrow(
-      /requires thinking/,
+      /requires? thinking/,
     );
+    expect(() => parseCliArgs(["--no-thinking", "--reasoning-effort", "low"])).toThrow(
+      /requires? thinking/,
+    );
+    expect(() => parseCliArgs(["--thinking-budget", "512", "--reasoning-effort", "low"])).toThrow(
+      /cannot be combined/,
+    );
+  });
+
+  it("parses reasoning effort and preserve thinking", () => {
+    const flags = parseCliArgs(["--reasoning-effort", "xhigh", "--preserve-thinking"]);
+    expect(flags.reasoningEffort).toBe("xhigh");
+    expect(flags.preserveThinking).toBe(true);
+    expect(() => parseCliArgs(["--reasoning-effort", "max"])).toThrow(/one of low, medium, xhigh/);
   });
 
   it("accepts t/m max-params units and rejects unknown --use", () => {

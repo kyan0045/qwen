@@ -25,6 +25,8 @@ Options
       --thinking                  Force thinking/reasoning mode on
       --no-thinking               Force thinking/reasoning mode off
       --thinking-budget <n>       Cap the reasoning token budget
+      --reasoning-effort <lvl>    Reasoning depth: low | medium | xhigh (DashScope)
+      --preserve-thinking         Keep earlier reasoning in context (DashScope)
       --enable-search             Let the model search the web (DashScope)
   -l, --local                     Prefer Ollama models; chat uses Ollama unless --provider is set
   -u, --use <task>                chat | coding | reasoning | vision | embed

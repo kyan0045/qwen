@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Qwen, resolveModelName } from "../src/client";
-import { QWEN3_CODER_480B, QWEN3_EMBEDDING_8B } from "../src/models/catalog";
+import { QWEN3_8_27B, QWEN3_CODER_480B, QWEN3_EMBEDDING_8B } from "../src/models/catalog";
 
 const ollama = { name: "ollama", kind: "ollama" } as const;
 const dashscope = { name: "dashscope", kind: "openai-compat" } as const;
@@ -65,6 +65,17 @@ describe("resolveModelName", () => {
       baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     } as const;
     expect(resolveModelName(QWEN3_CODER_480B, dashProxy)).toBe("qwen3-coder-plus");
+  });
+
+  it("uses dashscope ids on regional DashScope and QwenCloud endpoints", () => {
+    for (const baseURL of [
+      "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
+      "https://cn-hongkong.dashscope.aliyuncs.com/compatible-mode/v1",
+      "https://ap-southeast-1.maas.qwencloudapi.com/compatible-mode/v1",
+    ]) {
+      const config = { name: "custom", kind: "openai-compat", baseURL } as const;
+      expect(resolveModelName(QWEN3_8_27B, config)).toBe("qwen3.8-27b");
+    }
   });
 });
 

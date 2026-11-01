@@ -55,6 +55,25 @@ export function isOpenRouterEndpoint(baseURL: string | undefined): boolean {
   }
 }
 
+/**
+ * Recognises Model Studio / DashScope and QwenCloud hosts, including regional
+ * hosts such as dashscope-us and workspace-dedicated maas domains. These need
+ * the DashScope request mapping even when no provider name was given.
+ */
+export function isDashScopeEndpoint(baseURL: string | undefined): boolean {
+  if (!baseURL) return false;
+  try {
+    const host = new URL(baseURL).hostname.toLowerCase();
+    return (
+      /(^|\.)dashscope(?:-[a-z]+)?\.aliyuncs\.com$/.test(host) ||
+      host.endsWith(".maas.aliyuncs.com") ||
+      host.endsWith(".maas.qwencloudapi.com")
+    );
+  } catch {
+    return /dashscope|qwencloudapi/i.test(baseURL);
+  }
+}
+
 function isLocalHostname(hostname: string): boolean {
   const host = hostname.toLowerCase();
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return true;
@@ -134,6 +153,15 @@ export function resolveProvider(
     }
     const customURL = overrides.baseURL ?? environment.QWEN_BASE_URL;
     if (customURL) {
+      if (isDashScopeEndpoint(customURL)) {
+        const config = dashscopeProviderConfig(
+          true,
+          pickKey(overrides.apiKey, environment.DASHSCOPE_API_KEY, environment.QWEN_API_KEY),
+        );
+        config.baseURL = customURL;
+        if (overrides.headers) config.headers = overrides.headers;
+        return withDefaults(config, overrides, environment);
+      }
       return withDefaults(
         {
           name: "custom",
@@ -250,7 +278,7 @@ export function createTransport(config: ProviderConfig): Transport {
       headers: config.headers,
     });
   }
-  if (config.name.toLowerCase().startsWith("dashscope")) {
+  if (config.name.toLowerCase().startsWith("dashscope") || isDashScopeEndpoint(config.baseURL)) {
     return createDashScopeTransport(config);
   }
   return createOpenAICompatTransport({
@@ -265,7 +293,6 @@ export function createTransport(config: ProviderConfig): Transport {
 
 export function defaultModelFor(config: ProviderConfig): string | undefined {
   if (config.kind === "ollama") return "qwen3.8:27b";
-  if (isOpenRouterEndpoint(config.baseURL)) return "qwen/qwen3-coder-plus";
-  if (config.name.toLowerCase().startsWith("dashscope")) return "qwen3-coder-plus";
-  return "qwen3-coder-plus";
+  if (isOpenRouterEndpoint(config.baseURL)) return "qwen/qwen3.8-flash";
+  return "qwen3.8-flash";
 }

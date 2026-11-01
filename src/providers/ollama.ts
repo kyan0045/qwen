@@ -134,7 +134,7 @@ function buildBody(req: ChatRequest, stream: boolean): Record<string, unknown> {
   if (Object.keys(options).length) body.options = options;
 
   if (req.thinking !== undefined) body.think = req.thinking;
-  else if (req.thinkingBudget !== undefined) body.think = true;
+  else if (req.thinkingBudget !== undefined || req.reasoningEffort !== undefined) body.think = true;
 
   return body;
 }
