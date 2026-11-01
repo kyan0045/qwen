@@ -9,6 +9,23 @@ breaking changes.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-01
+
+### Added
+
+- `reasoningEffort` (`low` | `medium` | `xhigh`) and `preserveThinking` on chat requests, plus `--reasoning-effort` and `--preserve-thinking` CLI flags.
+- DashScope mapping for US, Hong Kong, workspace-dedicated, and QwenCloud endpoints used through `QWEN_BASE_URL` or `baseURL`.
+
+### Changed
+
+- Default chat model is now `qwen3.8-flash` (`qwen/qwen3.8-flash` on OpenRouter) instead of `qwen3-coder-plus`.
+
+### Fixed
+
+- Qwen3.8 27B, Flash-Next, and Omni Flash maximum output is 131072 tokens.
+- Qwen3.8 27B and 2.4T-A95B now carry their DashScope ids.
+- Qwen3.8 27B and 2.4T-A95B notes record native 262144 context and the 1M YaRN extension.
+
 ## [0.2.0] - 2026-10-09
 
 ### Added
