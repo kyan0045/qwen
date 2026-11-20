@@ -54,11 +54,11 @@ recommend({ use: "coding", local: true, maxParams: "32b" });
 recommend({ use: "embed" });
 // → Qwen3-Embedding 8B
 
-`maxParams` accepts plain numbers or strings like `"32b"` and `"2.4t"`.
-Negative or unparseable values throw, as do negative or non-finite `minContext` values.
-
 models.filter((m) => !m.legacy && m.capabilities.includes("vision"));
 ```
+
+`maxParams` accepts plain numbers or strings like `"32b"` and `"2.4t"`.
+Negative or unparseable values throw, as do negative or non-finite `minContext` values.
 
 Every entry carries `id`, `name`, `family`, `contextWindow`, `maxOutput`, `capabilities` and `thinking`. `params`, `paramCount`, `ollamaTag`, `dashscopeId`, `openrouterId`, `embeddingDimensions`, `legacy`, `preview` and `cloudOnly` are present where they exist.
 

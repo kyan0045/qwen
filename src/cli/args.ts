@@ -79,24 +79,21 @@ function nonEmpty(name: string, value: string | undefined): string | undefined {
 }
 
 export function parseCliArgs(argv: string[]): CliFlags {
-  const { values, positionals } = parseArgs({
+  const { values, positionals, tokens } = parseArgs({
     args: argv,
-    options: OPTIONS as never,
+    options: OPTIONS,
     allowPositionals: true,
     allowNegative: false,
+    tokens: true,
   });
 
   const v = values as Record<string, string | boolean | undefined>;
-  // Last-wins for --thinking / --no-thinking (parseArgs loses order).
+  // Last-wins for --thinking / --no-thinking (parseArgs values lose order).
   let thinking: boolean | undefined;
-  for (const a of argv) {
-    if (a === "--thinking") thinking = true;
-    else if (a === "--no-thinking") thinking = false;
-  }
-  if (thinking === undefined) {
-    const parsed = typeof v.thinking === "boolean" ? v.thinking : undefined;
-    const noThinking = v["no-thinking"] === true;
-    if (parsed !== undefined || noThinking) thinking = noThinking ? false : parsed;
+  for (const token of tokens) {
+    if (token.kind !== "option") continue;
+    if (token.name === "thinking") thinking = true;
+    else if (token.name === "no-thinking") thinking = false;
   }
 
   const useRaw = v.use as string | undefined;

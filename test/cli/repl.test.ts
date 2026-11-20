@@ -2,9 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Qwen } from "../../src/client";
 import type { ChatChunk } from "../../src/types";
 
-const { mockQuestion, mockClose } = vi.hoisted(() => ({
+const { mockQuestion, mockClose, mockStop } = vi.hoisted(() => ({
   mockQuestion: vi.fn(),
   mockClose: vi.fn(),
+  mockStop: vi.fn(),
 }));
 
 vi.mock("node:readline/promises", () => ({
@@ -12,7 +13,7 @@ vi.mock("node:readline/promises", () => ({
 }));
 
 vi.mock("../../src/cli/spinner", () => ({
-  startSpinner: vi.fn(() => ({ stop: vi.fn() })),
+  startSpinner: vi.fn(() => ({ stop: mockStop })),
 }));
 
 import { type ReplOptions, runRepl } from "../../src/cli/repl";
@@ -37,6 +38,7 @@ function options(client: Qwen): ReplOptions {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe("runRepl commands", () => {
@@ -95,12 +97,34 @@ describe("runRepl commands", () => {
     expect(lines.some((l) => l.includes("error: down"))).toBe(true);
   });
 
-  it("discards reasoning-only turns", async () => {
+  it("discards reasoning-only turns and stops the spinner before writing output", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const client = clientReturning([chunk({ reasoningContent: "hmm" })]);
     mockQuestion.mockResolvedValueOnce("think").mockResolvedValueOnce("/exit");
     const lines: string[] = [];
     await runRepl(options(client), (s) => lines.push(s));
     expect(lines.some((l) => l.includes("empty answer discarded"))).toBe(true);
     expect((client.chatStream as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+    expect(mockStop.mock.invocationCallOrder[0]).toBeLessThan(
+      stdoutSpy.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("omits reasoningEffort after /thinking off", async () => {
+    const client = clientReturning([chunk({ content: "ok" })]);
+    mockQuestion
+      .mockResolvedValueOnce("/thinking off")
+      .mockResolvedValueOnce("hello")
+      .mockResolvedValueOnce("/exit");
+    const lines: string[] = [];
+    await runRepl({ client, model: "qwen3.8-flash", reasoningEffort: "medium" }, (s) =>
+      lines.push(s),
+    );
+    const sent = (client.chatStream as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as {
+      thinking?: boolean;
+      reasoningEffort?: string;
+    };
+    expect(sent.thinking).toBe(false);
+    expect(sent.reasoningEffort).toBeUndefined();
   });
 });

@@ -119,8 +119,8 @@ export async function runRepl(options: ReplOptions, out: (s: string) => void): P
         messages: history,
         model,
         thinking,
-        thinkingBudget: options.thinkingBudget,
-        reasoningEffort: options.reasoningEffort,
+        thinkingBudget: thinking === false ? undefined : options.thinkingBudget,
+        reasoningEffort: thinking === false ? undefined : options.reasoningEffort,
         preserveThinking: options.preserveThinking,
         enableSearch: options.enableSearch,
         temperature: options.temperature,
@@ -130,6 +130,7 @@ export async function runRepl(options: ReplOptions, out: (s: string) => void): P
         spinner.stop();
         process.stdout.write(text);
       });
+      spinner.stop();
       process.stdout.write("\n\n");
       const sentModel = resolveModelName(
         model,

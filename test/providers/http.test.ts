@@ -3,11 +3,18 @@ import {
   APIError,
   AuthenticationError,
   BadRequestError,
+  ConnectionError,
   NotFoundError,
   PermissionError,
   RateLimitError,
 } from "../../src/errors";
-import { ndjsonLines, rawRequest, requestJSON, sseData } from "../../src/providers/http";
+import {
+  effectiveSignal,
+  ndjsonLines,
+  rawRequest,
+  requestJSON,
+  sseData,
+} from "../../src/providers/http";
 
 function sseResponse(text: string): Response {
   return new Response(text, {
@@ -146,9 +153,80 @@ describe("rawRequest", () => {
     const payload = await requestJSON({ baseURL: "http://mock.test", path: "/items", body: {} });
     expect(payload).toEqual({ message: "not json" });
   });
+
+  it("maps requestJSON body timeouts to ConnectionError with timeoutMs", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: unknown, init?: RequestInit) => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        text: () =>
+          new Promise<string>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(init.signal?.reason ?? new DOMException("timed out", "TimeoutError"));
+            });
+          }),
+      })),
+    );
+    const error = await requestJSON({
+      baseURL: "http://mock.test",
+      path: "/items",
+      body: {},
+      timeoutMs: 10,
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ConnectionError);
+    expect((error as Error).message).toMatch(/timed out after 10ms/);
+  });
+
+  it("ignores whitespace and negative Retry-After headers while keeping valid ones", async () => {
+    for (const [header, expected] of [
+      ["   ", undefined],
+      ["-5", undefined],
+      ["0", 0],
+      ["12", 12],
+    ] as const) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async () =>
+            new Response(JSON.stringify({ error: { message: "rate" } }), {
+              status: 429,
+              headers: { "retry-after": header },
+            }),
+        ),
+      );
+      const err = await rawRequest({ baseURL: "http://mock.test", path: "/items", body: {} }).catch(
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(RateLimitError);
+      expect((err as RateLimitError).retryAfter).toBe(expected);
+    }
+  });
 });
 
 describe("stream cancellation", () => {
+  it("maps hanging stream timeouts to ConnectionError with timeoutMs", async () => {
+    const hangingResponse = () => new Response(new ReadableStream({ start() {} }), { status: 200 });
+
+    const sseSignal = effectiveSignal({ timeoutMs: 10 });
+    const sseErr = await (async () => {
+      for await (const _ of sseData(hangingResponse(), sseSignal, "/chat/completions")) {
+        // drain
+      }
+    })().catch((e: unknown) => e);
+    expect(sseErr).toBeInstanceOf(ConnectionError);
+    expect((sseErr as Error).message).toMatch(/\/chat\/completions timed out after 10ms/);
+
+    const ndjsonSignal = effectiveSignal({ timeoutMs: 10 });
+    const ndjsonErr = await (async () => {
+      for await (const _ of ndjsonLines(hangingResponse(), ndjsonSignal, "/api/chat")) {
+        // drain
+      }
+    })().catch((e: unknown) => e);
+    expect(ndjsonErr).toBeInstanceOf(ConnectionError);
+    expect((ndjsonErr as Error).message).toMatch(/\/api\/chat timed out after 10ms/);
+  });
   it("cancels SSE and NDJSON readers when consumers stop early", async () => {
     const encoder = new TextEncoder();
     const sseCancelled = await cancelEarly((cancelled) => {

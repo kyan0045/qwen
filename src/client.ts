@@ -83,7 +83,15 @@ export function resolveModelName(
   const supplied = typeof ref === "string" ? ref : ref.id;
   const known =
     typeof ref === "string" ? resolveModel(ref) : (modelsById.get(ref.id) ?? resolveModel(ref.id));
-  if (!known) return supplied;
+  if (!known) {
+    if (typeof ref === "string") return supplied;
+    if (config.kind === "ollama") return ref.ollamaTag ?? supplied;
+    if (isOpenRouterEndpoint(config.baseURL)) return ref.openrouterId ?? supplied;
+    if (config.name.toLowerCase().startsWith("dashscope") || isDashScopeEndpoint(config.baseURL)) {
+      return ref.dashscopeId ?? supplied;
+    }
+    return supplied;
+  }
   if (config.kind === "ollama") {
     if (!known.ollamaTag) {
       throw new ConfigurationError(
@@ -120,11 +128,20 @@ export class Qwen {
 
   constructor(options: QwenOptions = {}) {
     const overrides: Record<string, unknown> = {};
-    if (options.provider)
-      Object.assign(overrides, typeof options.provider === "string" ? {} : options.provider);
+    if (options.provider && typeof options.provider !== "string") {
+      Object.assign(overrides, options.provider);
+    }
     if (options.apiKey) overrides.apiKey = options.apiKey;
-    if (options.baseURL) overrides.baseURL = options.baseURL;
-    if (options.headers) overrides.headers = options.headers;
+    if (options.baseURL !== undefined) overrides.baseURL = options.baseURL;
+    if (options.headers) {
+      const providerHeaders =
+        typeof overrides.headers === "object" && overrides.headers !== null
+          ? (overrides.headers as Record<string, string>)
+          : undefined;
+      overrides.headers = providerHeaders
+        ? { ...providerHeaders, ...options.headers }
+        : options.headers;
+    }
     const name = typeof options.provider === "string" ? options.provider : undefined;
     this.config = resolveProvider(
       { ...(overrides as object), ...(name ? { name } : {}) } as ProviderInput,
@@ -146,25 +163,17 @@ export class Qwen {
   }
 
   private pickModel(ref?: ModelRef): string {
-    const target = ref ?? this.defaultModel;
-    try {
-      return resolveModelName(target, this.config, defaultModelFor(this.config));
-    } catch (error) {
-      if (error instanceof ConfigurationError && target !== undefined) {
-        const known =
-          typeof target === "string"
-            ? resolveModel(target)
-            : (modelsById.get(target.id) ?? resolveModel(target.id));
-        const fallback = known ? defaultModelFor(this.config) : undefined;
-        if (fallback) return fallback;
-      }
-      throw error;
-    }
+    return resolveModelName(ref ?? this.defaultModel, this.config, defaultModelFor(this.config));
   }
 
   private prepare(req: ChatRequest): ChatRequest {
     const prepared: ChatRequest = { ...req, model: this.pickModel(req.model) };
-    if (prepared.thinking === undefined && this.defaultThinking !== undefined) {
+    if (
+      prepared.thinking === undefined &&
+      prepared.thinkingBudget === undefined &&
+      prepared.reasoningEffort === undefined &&
+      this.defaultThinking !== undefined
+    ) {
       prepared.thinking = this.defaultThinking;
     }
     return prepared;
@@ -263,42 +272,53 @@ export function createClient(options?: QwenOptions): Qwen {
 
 type ClientOptions = QwenOptions & CallOptions & { provider?: ProviderInput };
 
-function splitClientOptions(
-  req: ChatRequest & Partial<ClientOptions>,
+function pickDefined<T extends object>(obj: T | undefined): Partial<T> {
+  if (!obj) return {};
+  const out: Partial<T> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) (out as Record<string, unknown>)[k] = v;
+  }
+  return out;
+}
+
+function splitClientOptions<T extends { model?: ModelRef }>(
+  req: T & Partial<ClientOptions>,
   opts?: ClientOptions,
-): { client: Qwen; rest: ChatRequest; call?: CallOptions } {
-  const merged = { ...req, ...opts };
+): { client: Qwen; rest: T; call?: CallOptions } {
+  const merged = { ...pickDefined(req), ...pickDefined(opts) };
+  const { provider, apiKey, baseURL, defaultThinking, headers, env, timeoutMs, signal } = merged;
   const {
-    provider,
-    apiKey,
-    baseURL,
-    model,
-    defaultThinking,
-    headers,
-    env,
-    timeoutMs,
-    signal,
-    ...rest
-  } = merged;
+    provider: _p,
+    apiKey: _k,
+    baseURL: _b,
+    model: reqModel,
+    defaultThinking: _dt,
+    headers: _h,
+    env: _e,
+    timeoutMs: _tm,
+    signal: _s,
+    ...restObj
+  } = req;
+  const rest = (reqModel !== undefined ? { ...restObj, model: reqModel } : restObj) as unknown as T;
   const client = new Qwen({
     provider,
     apiKey,
     baseURL,
-    model,
+    model: opts?.model ?? reqModel,
     defaultThinking,
     headers,
     env,
     timeoutMs,
   });
   const call = signal !== undefined || timeoutMs !== undefined ? { signal, timeoutMs } : undefined;
-  return { client, rest: rest as ChatRequest, call };
+  return { client, rest, call };
 }
 
 export function chat(
   req: ChatRequest & { provider?: ProviderInput } & QwenOptions,
   opts?: ClientOptions,
 ): Promise<ChatResponse> {
-  const { client, rest, call } = splitClientOptions(req, opts);
+  const { client, rest, call } = splitClientOptions<ChatRequest>(req, opts);
   return client.chat(rest, call);
 }
 
@@ -306,7 +326,7 @@ export function chatStream(
   req: ChatRequest & { provider?: ProviderInput } & QwenOptions,
   opts?: ClientOptions,
 ): AsyncIterable<ChatChunk> {
-  const { client, rest, call } = splitClientOptions(req, opts);
+  const { client, rest, call } = splitClientOptions<ChatRequest>(req, opts);
   return client.chatStream(rest, call);
 }
 
@@ -315,10 +335,7 @@ export async function say(
   req: Omit<ChatRequest, "messages"> & QwenOptions = {},
   opts?: ClientOptions,
 ): Promise<string> {
-  const { client, rest, call } = splitClientOptions(
-    req as ChatRequest & Partial<ClientOptions>,
-    opts,
-  );
+  const { client, rest, call } = splitClientOptions<Omit<ChatRequest, "messages">>(req, opts);
   return client.say(prompt, rest, call);
 }
 
@@ -327,10 +344,7 @@ export async function sayStream(
   req: Omit<ChatRequest, "messages"> & QwenOptions = {},
   opts?: ClientOptions,
 ): Promise<string> {
-  const { client, rest, call } = splitClientOptions(
-    req as ChatRequest & Partial<ClientOptions>,
-    opts,
-  );
+  const { client, rest, call } = splitClientOptions<Omit<ChatRequest, "messages">>(req, opts);
   return client.sayStream(prompt, rest, call);
 }
 
@@ -338,31 +352,8 @@ export function embed(
   req: EmbedRequest & { provider?: ProviderInput } & QwenOptions,
   opts?: ClientOptions,
 ): Promise<EmbedResponse> {
-  const merged = { ...req, ...opts };
-  const {
-    provider,
-    apiKey,
-    baseURL,
-    model,
-    defaultThinking,
-    headers,
-    env,
-    timeoutMs,
-    signal,
-    ...rest
-  } = merged;
-  const client = new Qwen({
-    provider,
-    apiKey,
-    baseURL,
-    model,
-    defaultThinking,
-    headers,
-    env,
-    timeoutMs,
-  });
-  const call = signal !== undefined || timeoutMs !== undefined ? { signal, timeoutMs } : undefined;
-  return client.embed({ ...rest, model } as EmbedRequest, call);
+  const { client, rest, call } = splitClientOptions<EmbedRequest>(req, opts);
+  return client.embed(rest, call);
 }
 
 export { requireModel, resolveModel };

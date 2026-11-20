@@ -13,7 +13,16 @@ import type {
   ToolCallDelta,
   Usage,
 } from "../types";
-import { effectiveSignal, isAbortError, rawRequest, requestJSON, sseData } from "./http";
+import {
+  effectiveSignal,
+  isAbortError,
+  isTimeoutError,
+  rawRequest,
+  requestJSON,
+  signalTimeoutMs,
+  sseData,
+  timeoutError,
+} from "./http";
 import type { CallOptions, Transport } from "./types";
 
 function toWireMessage(m: Message): Record<string, unknown> {
@@ -203,8 +212,11 @@ function parseChunk(payload: unknown): ChatChunk {
       const out: ToolCallDelta = {
         index: typeof t.index === "number" ? t.index : index,
       };
-      if (typeof t.id === "string") out.id = t.id;
-      if (typeof fn.name === "string") out.function = { ...(out.function ?? {}), name: fn.name };
+      if (typeof t.id === "string" && t.id) out.id = t.id;
+      if (t.type === "function") out.type = "function";
+      if (typeof fn.name === "string" && fn.name) {
+        out.function = { ...(out.function ?? {}), name: fn.name };
+      }
       if (typeof fn.arguments === "string") {
         out.function = { ...(out.function ?? {}), arguments: fn.arguments };
       }
@@ -228,7 +240,7 @@ export interface OpenAICompatOptions {
 export function createOpenAICompatTransport(opts: OpenAICompatOptions): Transport {
   const headers = () => ({ ...(opts.headers ?? {}) });
 
-  async function send(req: ChatRequest, stream: boolean, call?: CallOptions) {
+  async function send(req: ChatRequest, stream: boolean, signal?: AbortSignal) {
     const body = buildChatBody(req);
     if (opts.mapRequestBody) opts.mapRequestBody(body, req);
     body.stream = stream;
@@ -241,7 +253,7 @@ export function createOpenAICompatTransport(opts: OpenAICompatOptions): Transpor
       apiKey: opts.apiKey,
       headers: headers(),
       body,
-      signal: effectiveSignal(call),
+      signal,
       stream,
     });
   }
@@ -253,12 +265,16 @@ export function createOpenAICompatTransport(opts: OpenAICompatOptions): Transpor
           `The ${opts.name} transport requires req.model. Pass model to the call or set a default on the client.`,
         );
       }
-      const response = await send(req, false, call);
+      const signal = effectiveSignal(call);
+      const response = await send(req, false, signal);
       let payload: unknown;
       try {
         payload = await response.json();
       } catch (cause) {
         if (isAbortError(cause)) throw cause;
+        if (isTimeoutError(cause)) {
+          throw timeoutError("/chat/completions", signalTimeoutMs(signal), cause);
+        }
         throw new APIError(`Invalid JSON response from ${opts.name} provider`, { cause });
       }
       return parseChatResponse(payload, opts.name);
@@ -270,11 +286,10 @@ export function createOpenAICompatTransport(opts: OpenAICompatOptions): Transpor
           `The ${opts.name} transport requires req.model. Pass model to the call or set a default on the client.`,
         );
       }
-      const response = await send(req, true, call);
       const signal = effectiveSignal(call);
+      const response = await send(req, true, signal);
       let yielded = 0;
-      for await (const data of sseData(response, signal)) {
-        signal?.throwIfAborted?.();
+      for await (const data of sseData(response, signal, "/chat/completions")) {
         let payload: unknown;
         try {
           payload = JSON.parse(data);

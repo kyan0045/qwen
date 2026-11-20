@@ -1,11 +1,33 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { VERSION } from "../../src";
 import { parseCliArgs } from "../../src/cli/args";
+
+const { mockRunRepl } = vi.hoisted(() => ({
+  mockRunRepl: vi.fn(async () => undefined),
+}));
+
+vi.mock("../../src/cli/repl", () => ({
+  runRepl: mockRunRepl,
+}));
+
 import { main, resolveChatTarget } from "../../src/cli/index";
 import { resolveModel } from "../../src/models";
 
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
 describe("main dispatch", () => {
-  it("prints the version", async () => {
+  it("prints the package version rather than 0.0.0", async () => {
+    const writes: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
+      writes.push(String(chunk));
+      return true;
+    });
     await expect(main(["--version"])).resolves.toBe(0);
+    expect(writes.join("")).toBe(`${VERSION}\n`);
   });
 
   it("lists models offline", async () => {
@@ -42,6 +64,47 @@ describe("main dispatch", () => {
 
   it("rejects --prompt combined with positional words", async () => {
     await expect(main(["--prompt", "sum", "extra"])).resolves.toBe(2);
+  });
+
+  it("routes bare -l and --json to chat when stdin is piped and to REPL with chat flags", async () => {
+    const stdoutWrites: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
+      stdoutWrites.push(String(chunk));
+      return true;
+    });
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    const fetchMock = vi.fn(async (url: unknown) => {
+      if (String(url).endsWith("/api/chat")) {
+        return new Response(
+          `${JSON.stringify({ model: "qwen3.8:27b", message: { content: "local ok" }, done: true })}\n`,
+          { status: 200 },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          id: "1",
+          model: "qwen3.8-flash",
+          choices: [{ message: { role: "assistant", content: "json ok" }, finish_reason: "stop" }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(main(["-l"], { stdin: "hi" })).resolves.toBe(0);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/chat");
+    expect(stdoutWrites.join("")).toContain("local ok");
+
+    stdoutWrites.length = 0;
+    await expect(main(["--json"], { stdin: "hi" })).resolves.toBe(0);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/chat/completions");
+    const jsonOut = JSON.parse(stdoutWrites.join("")) as { message: { content: string } };
+    expect(jsonOut.message.content).toBe("json ok");
+
+    await expect(main(["-l", "-m", "qwen3.8:27b"])).resolves.toBe(0);
+    await expect(main(["-l", "--thinking"])).resolves.toBe(0);
+    expect(mockRunRepl).toHaveBeenCalledTimes(2);
   });
 });
 

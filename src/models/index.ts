@@ -242,7 +242,7 @@ export function recommendAll(opts: RecommendOptions = {}): QwenModel[] {
   if (opts.use === "reasoning") want.push("thinking");
   if (opts.tools) want.push("tools");
   if (opts.thinking) want.push("thinking");
-  if (opts.use === "chat" && want.length === 0) want.push("chat");
+  if (opts.use !== "embed" && want.length === 0) want.push("chat");
 
   const filtered = models.filter((m) => {
     if (m.legacy && !opts.includeLegacy) return false;

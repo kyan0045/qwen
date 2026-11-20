@@ -14,7 +14,16 @@ import type {
   ToolCall,
   Usage,
 } from "../types";
-import { effectiveSignal, isAbortError, ndjsonLines, rawRequest, requestJSON } from "./http";
+import {
+  effectiveSignal,
+  isAbortError,
+  isTimeoutError,
+  ndjsonLines,
+  rawRequest,
+  requestJSON,
+  signalTimeoutMs,
+  timeoutError,
+} from "./http";
 import type { CallOptions, Transport } from "./types";
 
 interface OllamaToolCall {
@@ -222,10 +231,18 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         payload = (await response.json()) as OllamaChatPayload & { error?: string };
       } catch (cause) {
         if (isAbortError(cause)) throw cause;
+        if (isTimeoutError(cause)) {
+          throw timeoutError("/api/chat", signalTimeoutMs(signal), cause);
+        }
         throw new APIError("Invalid JSON response from Ollama provider", { cause });
       }
       if (typeof payload.error === "string" && payload.error) {
         throw new APIError(payload.error, { body: payload });
+      }
+      if (!payload.message || typeof payload.message !== "object") {
+        throw new APIError("Invalid chat response from Ollama provider: missing message", {
+          body: payload,
+        });
       }
       return {
         id: payload.created_at ?? "",
@@ -251,8 +268,7 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         stream: true,
       });
       let yielded = 0;
-      for await (const line of ndjsonLines(response, signal)) {
-        signal?.throwIfAborted?.();
+      for await (const line of ndjsonLines(response, signal, "/api/chat")) {
         let payload: OllamaChatPayload & { error?: string };
         try {
           payload = JSON.parse(line) as OllamaChatPayload & { error?: string };
@@ -319,7 +335,11 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
       });
       let rows = payload.embeddings;
       if (!rows && Array.isArray(payload.embedding)) rows = [payload.embedding];
-      if (!Array.isArray(rows)) {
+      const validRows =
+        Array.isArray(rows) &&
+        rows.length > 0 &&
+        rows.every((r) => Array.isArray(r) && r.every((n) => typeof n === "number"));
+      if (!validRows || !rows) {
         throw new APIError("Invalid embedding response from Ollama provider", {
           body: payload,
         });
@@ -377,16 +397,22 @@ export function createOllamaTransport(opts: OllamaTransportOptions): Transport {
         signal,
         stream: true,
       });
-      for await (const line of ndjsonLines(response, signal)) {
-        signal?.throwIfAborted?.();
+      let events = 0;
+      for await (const line of ndjsonLines(response, signal, "/api/pull")) {
         let payload: PullProgress & { error?: string };
         try {
           payload = JSON.parse(line) as PullProgress & { error?: string };
         } catch {
           continue;
         }
+        events += 1;
         if (payload.error) throw new APIError(payload.error, { body: payload });
         await opts2?.onProgress?.(payload);
+      }
+      if (events === 0) {
+        throw new APIError(
+          "Empty or invalid pull stream from Ollama provider: no usable events received",
+        );
       }
     },
   };

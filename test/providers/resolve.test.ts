@@ -3,6 +3,8 @@ import {
   DASHSCOPE_INTERNATIONAL_BASE_URL,
   createTransport,
   defaultModelFor,
+  isDashScopeEndpoint,
+  isOpenRouterEndpoint,
   resolveProvider,
 } from "../../src/providers";
 
@@ -147,5 +149,55 @@ describe("resolveProvider", () => {
 
     const custom = resolveProvider({ name: "custom", baseURL: "example.test:8080/v1" }, {});
     expect(custom.baseURL).toBe("https://example.test:8080/v1");
+  });
+
+  it("recognizes regional DashScope and QwenCloud URLs passed directly as provider", () => {
+    const config = resolveProvider("https://dashscope-us.aliyuncs.com/compatible-mode/v1", {
+      DASHSCOPE_API_KEY: "sk-region",
+    });
+    expect(config.name).toBe("dashscope");
+    expect(config.apiKey).toBe("sk-region");
+    expect(config.mapRequestBody).toBeTypeOf("function");
+
+    const qwenCloud = resolveProvider(
+      "https://ap-southeast-1.maas.qwencloudapi.com/compatible-mode/v1",
+      { DASHSCOPE_API_KEY: "sk-qc" },
+    );
+    expect(qwenCloud.name).toBe("dashscope");
+    expect(qwenCloud.apiKey).toBe("sk-qc");
+    expect(qwenCloud.mapRequestBody).toBeTypeOf("function");
+  });
+
+  it("does not misclassify scheme-less non-DashScope or non-OpenRouter URLs", () => {
+    expect(isDashScopeEndpoint("proxy.example/dashscope/v1")).toBe(false);
+    expect(isDashScopeEndpoint("evil-dashscope.com/v1")).toBe(false);
+    expect(isOpenRouterEndpoint("evil-openrouter.ai/v1")).toBe(false);
+    expect(isOpenRouterEndpoint("proxy.example/openrouter.ai/v1")).toBe(false);
+
+    const cfg = resolveProvider(
+      {},
+      { QWEN_BASE_URL: "proxy.example/dashscope/v1", DASHSCOPE_API_KEY: "sk-secret" },
+    );
+    expect(cfg.name).toBe("custom");
+    expect(cfg.apiKey).toBeUndefined();
+    expect(cfg.mapRequestBody).toBeUndefined();
+  });
+
+  it("rejects misspelled provider names even when QWEN_BASE_URL is set", () => {
+    expect(() =>
+      resolveProvider("olama", { QWEN_BASE_URL: "https://fallback.example/v1" }),
+    ).toThrow(/Unknown provider/);
+
+    const custom = resolveProvider("custom", { QWEN_BASE_URL: "https://fallback.example/v1" });
+    expect(custom.name).toBe("custom");
+    expect(custom.baseURL).toBe("https://fallback.example/v1");
+  });
+
+  it("handles trailing whitespace/slashes and rejects scheme-only baseURLs", () => {
+    const cfg = resolveProvider({ name: "ollama", baseURL: "http://localhost:11434/  " }, {});
+    expect(cfg.baseURL).toBe("http://localhost:11434");
+
+    expect(() => resolveProvider({ baseURL: "http://" }, {})).toThrow(/must not be empty/);
+    expect(() => resolveProvider({ baseURL: "   /  " }, {})).toThrow(/must not be empty/);
   });
 });

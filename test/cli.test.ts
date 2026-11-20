@@ -55,4 +55,18 @@ describe("parseCliArgs", () => {
     expect(() => parseCliArgs(["--thinking-budget", "-1"])).toThrow(/--thinking-budget/);
     expect(() => parseCliArgs(["--top", "0"])).toThrow(/--top/);
   });
+
+  it("ignores --no-thinking after -- and inside option values", () => {
+    const afterDash = parseCliArgs(["--thinking", "--", "--no-thinking"]);
+    expect(afterDash.thinking).toBe(true);
+    expect(afterDash.positionals).toEqual(["--no-thinking"]);
+
+    const inSystem = parseCliArgs(["--thinking", "--system=--no-thinking", "hi"]);
+    expect(inSystem.thinking).toBe(true);
+    expect(inSystem.system).toBe("--no-thinking");
+
+    const inPrompt = parseCliArgs(["--thinking", "--prompt=--no-thinking"]);
+    expect(inPrompt.thinking).toBe(true);
+    expect(inPrompt.prompt).toBe("--no-thinking");
+  });
 });

@@ -23,7 +23,11 @@ export async function runRecommend(flags: CliFlags, out: (s: string) => void): P
   }).slice(0, top);
 
   if (!list.length) {
-    out("No model matched. Try relaxing --max-params or adding --local=false.");
+    out(
+      flags.local
+        ? "No model matched. Try relaxing --max-params or omitting --local."
+        : "No model matched. Try relaxing --max-params or changing --use.",
+    );
     return 1;
   }
 

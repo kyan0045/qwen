@@ -1,10 +1,18 @@
-import { readFileSync, realpathSync } from "node:fs";
+import { fstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { stdin as input } from "node:process";
 import { fileURLToPath } from "node:url";
 import { Qwen, resolveModelName } from "../client";
-import { QwenError } from "../errors";
-import { recommend, resolveModel } from "../models";
+import { ConfigurationError, QwenError } from "../errors";
+import { recommendAll, resolveModel } from "../models";
+import {
+  type ProviderInput,
+  type ResolveEnv,
+  defaultModelFor,
+  isDashScopeEndpoint,
+  isOpenRouterEndpoint,
+  resolveProvider,
+} from "../providers";
 import type { Message, Usage } from "../types";
 import { type CliFlags, parseCliArgs } from "./args";
 import { collectStreamText } from "./collect-stream";
@@ -17,14 +25,28 @@ import { startSpinner } from "./spinner";
 import { formatStats } from "./stats";
 
 function version(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  for (const rel of ["..", "../.."]) {
+    try {
+      const pkg = JSON.parse(readFileSync(join(here, rel, "package.json"), "utf8")) as {
+        name?: string;
+        version?: string;
+      };
+      if (pkg.name === "qwen" && pkg.version) return pkg.version;
+    } catch {
+      // try next candidate
+    }
+  }
+  return "0.0.0";
+}
+
+function hasPipedStdin(): boolean {
+  if (input.isTTY === true) return false;
   try {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const pkg = JSON.parse(readFileSync(join(here, "..", "package.json"), "utf8")) as {
-      version?: string;
-    };
-    return pkg.version ?? "0.0.0";
+    const stat = fstatSync(0);
+    return stat.isFIFO() || (stat.isFile() && stat.size > 0);
   } catch {
-    return "0.0.0";
+    return false;
   }
 }
 
@@ -52,42 +74,54 @@ function writeStdout(text: string): boolean {
   }
 }
 
-process.stdout.on("error", (error: NodeJS.ErrnoException) => {
-  if (error.code === "EPIPE") process.exit(0);
-  process.exitCode = 1;
-});
-process.stderr.on("error", (error: NodeJS.ErrnoException) => {
-  if (error.code === "EPIPE") process.exit(0);
-  process.exitCode = 1;
-});
-
 function err(line: string): void {
   process.stderr.write(`${line}\n`);
 }
 
-export function resolveChatTarget(flags: CliFlags): { provider?: string; model: string } {
+export function resolveChatTarget(
+  flags: CliFlags,
+  env: ResolveEnv = process.env,
+): { provider?: string; model: string } {
   const provider = flags.provider ?? (flags.local ? "ollama" : undefined);
   if (flags.model) return { provider, model: flags.model };
-  const ollama = provider === "ollama";
-  return {
-    provider,
-    model: recommend({
-      use: flags.use ?? "chat",
-      local: ollama || flags.local,
-      includeCloud: !ollama,
-      maxParams: flags.maxParams,
-    }).id,
-  };
+  const config = resolveProvider(provider as ProviderInput | undefined, env);
+  const isOllama = config.kind === "ollama";
+  const isOpenRouter = isOpenRouterEndpoint(config.baseURL);
+  const isDashScope =
+    config.name.toLowerCase().startsWith("dashscope") || isDashScopeEndpoint(config.baseURL);
+  const candidates = recommendAll({
+    use: flags.use ?? "chat",
+    local: isOllama || flags.local,
+    includeCloud: !isOllama,
+    maxParams: flags.maxParams,
+  });
+  const pick = candidates.find((m) => {
+    if (isOllama) return Boolean(m.ollamaTag);
+    if (isOpenRouter) return Boolean(m.openrouterId);
+    if (isDashScope) return Boolean(m.dashscopeId);
+    return true;
+  });
+  if (!pick) {
+    throw new ConfigurationError(
+      `No Qwen model matches ${JSON.stringify({
+        use: flags.use ?? "chat",
+        provider: config.name,
+        local: isOllama || flags.local || undefined,
+        maxParams: flags.maxParams,
+      })}. Pass -m/--model explicitly or relax constraints.`,
+    );
+  }
+  return { provider, model: pick.id };
 }
 
-async function runChat(flags: CliFlags): Promise<number> {
+async function runChat(flags: CliFlags, preReadStdin?: string): Promise<number> {
   const target = resolveChatTarget(flags);
   if (flags.prompt !== undefined && flags.positionals.length > 0) {
     err("error: --prompt cannot be combined with a positional prompt");
     return 2;
   }
   const promptFromArgs = flags.prompt ?? flags.positionals.join(" ").trim();
-  const piped = await readStdin();
+  const piped = preReadStdin !== undefined ? preReadStdin.replace(/\r?\n$/, "") : await readStdin();
   const userText = promptFromArgs || piped;
 
   if (!userText.trim()) {
@@ -163,7 +197,7 @@ async function runChat(flags: CliFlags): Promise<number> {
   if (!pipeOpen) return 0;
   answer = streamed.answer;
   reasoning = streamed.reasoning;
-  const sentModel = resolveModelName(request.model, client.config);
+  const sentModel = resolveModelName(request.model, client.config, defaultModelFor(client.config));
   const stats = formatStats(sentModel, streamed.usage, Date.now() - started);
 
   if (flags.quiet) {
@@ -181,7 +215,7 @@ async function runChat(flags: CliFlags): Promise<number> {
   return 0;
 }
 
-export async function main(argv: string[]): Promise<number> {
+export async function main(argv: string[], opts?: { stdin?: string }): Promise<number> {
   let flags: CliFlags;
   try {
     flags = parseCliArgs(argv);
@@ -220,9 +254,33 @@ export async function main(argv: string[]): Promise<number> {
     }
   }
 
-  if (flags.positionals.length === 0 && !flags.prompt) {
-    if (flags.use || flags.maxParams || flags.top) return runRecommend(flags, out);
-    if (flags.json || flags.local) return runModels(flags, out);
+  const hasChatFlags = Boolean(
+    flags.model !== undefined ||
+      flags.provider !== undefined ||
+      flags.system !== undefined ||
+      flags.thinking !== undefined ||
+      flags.thinkingBudget !== undefined ||
+      flags.reasoningEffort !== undefined ||
+      flags.preserveThinking ||
+      flags.enableSearch ||
+      flags.temperature !== undefined ||
+      flags.maxTokens !== undefined ||
+      flags.quiet,
+  );
+
+  let preReadStdin: string | undefined = opts?.stdin;
+
+  if (flags.positionals.length === 0 && !flags.prompt && !hasChatFlags) {
+    if (flags.top !== undefined) return runRecommend(flags, out);
+    if (flags.use || flags.maxParams || flags.json || flags.local) {
+      if (preReadStdin === undefined && hasPipedStdin()) {
+        preReadStdin = await readStdin();
+      }
+      if (!preReadStdin?.trim()) {
+        if (flags.use || flags.maxParams) return runRecommend(flags, out);
+        return runModels(flags, out);
+      }
+    }
   }
 
   // Subcommand names double as ordinary chat words: models/recommend/config
@@ -272,19 +330,31 @@ export async function main(argv: string[]): Promise<number> {
     err("error: --json and --quiet cannot be combined for chat output");
     return 2;
   }
-  return runChat(flags);
+  return runChat(flags, preReadStdin);
+}
+
+function canonicalPath(path: string): string {
+  const resolved = resolve(path);
+  try {
+    return realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
 }
 
 const entryPoint = process.argv[1];
-let invokedAsCli = false;
-if (entryPoint) {
-  try {
-    invokedAsCli = realpathSync(resolve(entryPoint)) === fileURLToPath(import.meta.url);
-  } catch {
-    invokedAsCli = resolve(entryPoint) === fileURLToPath(import.meta.url);
-  }
-}
+const invokedAsCli = entryPoint
+  ? canonicalPath(entryPoint) === canonicalPath(fileURLToPath(import.meta.url))
+  : false;
 if (invokedAsCli) {
+  process.stdout.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EPIPE") process.exit(0);
+    process.exitCode = 1;
+  });
+  process.stderr.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EPIPE") process.exit(0);
+    process.exitCode = 1;
+  });
   main(process.argv.slice(2))
     .then((code) => {
       process.exitCode = code;

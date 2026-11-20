@@ -45,14 +45,22 @@ function pickKey(...candidates: Array<string | undefined>): string | undefined {
   return undefined;
 }
 
-export function isOpenRouterEndpoint(baseURL: string | undefined): boolean {
-  if (!baseURL) return false;
+function parseEndpointHostname(baseURL: string | undefined): string | undefined {
+  if (!baseURL) return undefined;
+  const trimmed = baseURL.trim();
+  if (!trimmed) return undefined;
+  const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed) ? trimmed : `https://${trimmed}`;
   try {
-    const host = new URL(baseURL).hostname.toLowerCase();
-    return host === "openrouter.ai" || host.endsWith(".openrouter.ai");
+    return new URL(withScheme).hostname.toLowerCase();
   } catch {
-    return baseURL.toLowerCase().includes("openrouter.ai");
+    return undefined;
   }
+}
+
+export function isOpenRouterEndpoint(baseURL: string | undefined): boolean {
+  const host = parseEndpointHostname(baseURL);
+  if (!host) return false;
+  return host === "openrouter.ai" || host.endsWith(".openrouter.ai");
 }
 
 /**
@@ -61,17 +69,15 @@ export function isOpenRouterEndpoint(baseURL: string | undefined): boolean {
  * the DashScope request mapping even when no provider name was given.
  */
 export function isDashScopeEndpoint(baseURL: string | undefined): boolean {
-  if (!baseURL) return false;
-  try {
-    const host = new URL(baseURL).hostname.toLowerCase();
-    return (
-      /(^|\.)dashscope(?:-[a-z]+)?\.aliyuncs\.com$/.test(host) ||
-      host.endsWith(".maas.aliyuncs.com") ||
-      host.endsWith(".maas.qwencloudapi.com")
-    );
-  } catch {
-    return /dashscope|qwencloudapi/i.test(baseURL);
-  }
+  const host = parseEndpointHostname(baseURL);
+  if (!host) return false;
+  return (
+    /(^|\.)dashscope(?:-[a-z0-9-]+)?\.aliyuncs\.com$/.test(host) ||
+    host === "maas.aliyuncs.com" ||
+    host.endsWith(".maas.aliyuncs.com") ||
+    host === "maas.qwencloudapi.com" ||
+    host.endsWith(".maas.qwencloudapi.com")
+  );
 }
 
 function isLocalHostname(hostname: string): boolean {
@@ -90,13 +96,28 @@ function normalizeBaseURL(value: string): string {
   if (!trimmed) {
     throw new ConfigurationError("Provider baseURL must not be empty.");
   }
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)) return trimmed;
-  const authority = trimmed.split("/")[0] ?? "";
-  const hostname = authority.startsWith("[")
-    ? (authority.slice(1).split("]")[0] ?? "")
-    : (authority.split(":")[0] ?? "");
-  if (isLocalHostname(hostname)) return `http://${trimmed}`;
-  return `https://${trimmed}`;
+  const schemeMatch = /^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)(.*)$/.exec(trimmed);
+  if (schemeMatch) {
+    const scheme = schemeMatch[1]!;
+    const rest = schemeMatch[2]!.replace(/\/+$/, "");
+    if (!rest) {
+      throw new ConfigurationError("Provider baseURL must not be empty.");
+    }
+    return `${scheme}${rest}`;
+  }
+  const cleaned = trimmed.replace(/\/+$/, "");
+  if (!cleaned) {
+    throw new ConfigurationError("Provider baseURL must not be empty.");
+  }
+  const authority = cleaned.split("/")[0] ?? "";
+  const hostPort = authority.includes("@")
+    ? authority.slice(authority.lastIndexOf("@") + 1)
+    : authority;
+  const hostname = hostPort.startsWith("[")
+    ? (hostPort.slice(1).split("]")[0] ?? "")
+    : (hostPort.split(":")[0] ?? "");
+  if (isLocalHostname(hostname)) return `http://${cleaned}`;
+  return `https://${cleaned}`;
 }
 
 function withDefaults(
@@ -111,13 +132,13 @@ function withDefaults(
   environment: ResolveEnv,
 ): ProviderConfig {
   const out: ProviderConfig = { ...config };
-  if (overrides.baseURL) out.baseURL = overrides.baseURL;
+  if (overrides.baseURL !== undefined) out.baseURL = overrides.baseURL;
   else if (environment.QWEN_BASE_URL && !config.baseURL) out.baseURL = environment.QWEN_BASE_URL;
   if (overrides.apiKey) out.apiKey = overrides.apiKey;
   else if (out.apiKey === undefined) out.apiKey = environment.QWEN_API_KEY;
   if (overrides.headers) out.headers = overrides.headers;
   if (overrides.kind) out.kind = overrides.kind;
-  out.baseURL = normalizeBaseURL(out.baseURL.replace(/\/+$/, ""));
+  out.baseURL = normalizeBaseURL(out.baseURL);
   return out;
 }
 
@@ -142,7 +163,7 @@ export function resolveProvider(
   const wanted = overrides.name ?? environment.QWEN_PROVIDER;
 
   if (!wanted) {
-    if (environment.DASHSCOPE_HTTP_BASE_URL && !overrides.baseURL) {
+    if (environment.DASHSCOPE_HTTP_BASE_URL && overrides.baseURL === undefined) {
       const config = dashscopeProviderConfig(
         true,
         pickKey(overrides.apiKey, environment.DASHSCOPE_API_KEY, environment.QWEN_API_KEY),
@@ -247,12 +268,27 @@ export function resolveProvider(
       );
     }
     default: {
-      const isURL = /^https?:\/\//.test(wanted);
-      const baseURL = overrides.baseURL ?? (isURL ? wanted : environment.QWEN_BASE_URL);
+      const isURL = /^https?:\/\//i.test(wanted);
+      const baseURL =
+        overrides.baseURL ??
+        (isURL
+          ? wanted
+          : wanted.toLowerCase() === "custom"
+            ? environment.QWEN_BASE_URL
+            : undefined);
       if (!baseURL) {
         throw new ConfigurationError(
           `Unknown provider "${wanted}". Use "dashscope", "dashscope-cn", "openai", "ollama", or a full baseURL.`,
         );
+      }
+      if (overrides.kind !== "ollama" && isDashScopeEndpoint(baseURL)) {
+        const config = dashscopeProviderConfig(
+          true,
+          pickKey(overrides.apiKey, environment.DASHSCOPE_API_KEY, environment.QWEN_API_KEY),
+        );
+        config.baseURL = baseURL;
+        if (overrides.headers) config.headers = overrides.headers;
+        return withDefaults(config, { ...overrides, baseURL }, environment);
       }
       return withDefaults(
         {

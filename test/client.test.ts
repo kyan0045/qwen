@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Qwen, resolveModelName } from "../src/client";
+import { Qwen, chat, embed, resolveModelName } from "../src/client";
+import { ConfigurationError, ConnectionError } from "../src/errors";
 import { QWEN3_8_27B, QWEN3_CODER_480B, QWEN3_EMBEDDING_8B } from "../src/models/catalog";
 
 const ollama = { name: "ollama", kind: "ollama" } as const;
@@ -166,9 +167,128 @@ describe("Qwen client integration", () => {
       ),
     );
     const client = new Qwen({ provider: "http://mock.test/v1", model: "m", timeoutMs: 10 });
-    await expect(client.chat({ messages: [{ role: "user", content: "hi" }] })).rejects.toThrow(
-      /timed out/,
+    const error = await client
+      .chat({ messages: [{ role: "user", content: "hi" }] })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ConnectionError);
+    expect((error as Error).message).toMatch(/timed out after 10ms/);
+  });
+
+  it("throws ConfigurationError from client.chat and chatStream for unmapped catalog models", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const ollamaClient = new Qwen({ provider: "ollama", model: "qwen3.8-max" });
+    expect(() => ollamaClient.chat({ messages: [{ role: "user", content: "hi" }] })).toThrow(
+      ConfigurationError,
     );
+    expect(() => ollamaClient.chatStream({ messages: [{ role: "user", content: "hi" }] })).toThrow(
+      ConfigurationError,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("resolves custom ModelRefLike provider fields and falls back to id", () => {
+    const ref = {
+      id: "my-qwen",
+      ollamaTag: "my-qwen:7b",
+      dashscopeId: "my-qwen-ds",
+      openrouterId: "org/my-qwen",
+    };
+    expect(resolveModelName(ref, ollama)).toBe("my-qwen:7b");
+    expect(resolveModelName(ref, dashscope)).toBe("my-qwen-ds");
+    expect(resolveModelName(ref, openrouter)).toBe("org/my-qwen");
+    expect(resolveModelName(ref, custom)).toBe("my-qwen");
+    expect(resolveModelName({ id: "my-plain" }, ollama)).toBe("my-plain");
+  });
+
+  it("allows per-call thinkingBudget and reasoningEffort when defaultThinking is false", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: unknown, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return jsonResponse({
+          id: "1",
+          choices: [{ message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+        });
+      }),
+    );
+
+    const client = new Qwen({
+      provider: { name: "dashscope", baseURL: "http://mock.test/v1" },
+      apiKey: "sk-test",
+      defaultThinking: false,
+    });
+    await client.chat({ messages: [{ role: "user", content: "a" }] });
+    await client.chat({ messages: [{ role: "user", content: "b" }], thinkingBudget: 256 });
+    await client.chat({ messages: [{ role: "user", content: "c" }], reasoningEffort: "medium" });
+
+    expect(bodies[0]?.enable_thinking).toBe(false);
+    expect(bodies[1]?.enable_thinking).toBe(true);
+    expect(bodies[1]?.thinking_budget).toBe(256);
+    expect(bodies[2]?.enable_thinking).toBe(true);
+    expect(bodies[2]?.reasoning_effort).toBe("medium");
+  });
+
+  it("preserves explicit req.model and top-level embed default fallback semantics", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: unknown, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return jsonResponse({
+          id: "1",
+          choices: [{ message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+          data: [{ embedding: [0.5] }],
+        });
+      }),
+    );
+
+    await chat(
+      { model: "model-a", messages: [{ role: "user", content: "hi" }] },
+      { model: "model-b", provider: "http://mock.test/v1" },
+    );
+    await chat(
+      { messages: [{ role: "user", content: "hi" }] },
+      { model: "model-b", provider: "http://mock.test/v1" },
+    );
+    expect(bodies[0]?.model).toBe("model-a");
+    expect(bodies[1]?.model).toBe("model-b");
+
+    await embed({ input: "hi" }, { model: "qwen3-32b", provider: "http://mock.test/v1" });
+    expect(bodies[2]?.model).toBe("qwen3-embedding-8b");
+
+    expect(() =>
+      embed(
+        { input: "hi", model: "qwen3-32b" },
+        { model: "qwen3-embedding-8b", provider: "http://mock.test/v1" },
+      ),
+    ).toThrow(/does not support embeddings/);
+  });
+
+  it("rejects empty baseURL and merges provider and client headers", async () => {
+    expect(() => new Qwen({ baseURL: "" })).toThrow(ConfigurationError);
+
+    const seenHeaders: Array<Record<string, string>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: unknown, init?: RequestInit) => {
+        seenHeaders.push((init?.headers ?? {}) as Record<string, string>);
+        return jsonResponse({
+          id: "1",
+          choices: [{ message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+        });
+      }),
+    );
+
+    const client = new Qwen({
+      provider: { name: "custom", baseURL: "http://mock.test/v1", headers: { "x-a": "1" } },
+      headers: { "x-b": "2" },
+      model: "m",
+    });
+    await client.chat({ messages: [{ role: "user", content: "hi" }] });
+    expect(seenHeaders[0]).toMatchObject({ "x-a": "1", "x-b": "2" });
   });
 
   it("exposes top-level sayStream and embed helpers", async () => {

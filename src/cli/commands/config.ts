@@ -1,4 +1,4 @@
-import { type ProviderConfig, resolveProvider } from "../../providers";
+import { type ProviderConfig, isDashScopeEndpoint, resolveProvider } from "../../providers";
 import type { CliFlags } from "../args";
 
 function mask(value: string | undefined): string {
@@ -15,7 +15,7 @@ function source(config: ProviderConfig): string {
     }
     return "(unset)";
   };
-  if (config.name.startsWith("dashscope")) {
+  if (config.name.toLowerCase().startsWith("dashscope") || isDashScopeEndpoint(config.baseURL)) {
     return firstSet("DASHSCOPE_API_KEY", "QWEN_API_KEY");
   }
   if (config.name === "openai") return firstSet("QWEN_API_KEY");
@@ -34,7 +34,8 @@ function redactBaseURL(value: string): string {
 }
 
 export async function runConfig(flags: CliFlags, out: (s: string) => void): Promise<number> {
-  const config = resolveProvider(flags.provider as never);
+  const provider = flags.provider ?? (flags.local ? "ollama" : undefined);
+  const config = resolveProvider(provider as never);
   const payload = {
     provider: config.name,
     kind: config.kind,

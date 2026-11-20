@@ -83,9 +83,64 @@ describe("transport error mapping", () => {
       ),
     );
     const transport = createOllamaTransport({ name: "ollama", baseURL: "http://mock.test" });
-    await expect(
-      transport.chat({ model: "m", messages: [] }, { timeoutMs: 10 }),
-    ).rejects.toBeInstanceOf(ConnectionError);
+    const error = await transport
+      .chat({ model: "m", messages: [] }, { timeoutMs: 10 })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ConnectionError);
+    expect((error as Error).message).toMatch(/timed out after 10ms/);
+  });
+
+  it("maps body json() and streaming timeouts to ConnectionError with timeoutMs", async () => {
+    const abortingJsonResponse = (signal: AbortSignal | null | undefined) =>
+      ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: () =>
+          new Promise((_resolve, reject) => {
+            signal?.addEventListener("abort", () => {
+              reject(signal.reason ?? new DOMException("timed out", "TimeoutError"));
+            });
+          }),
+      }) as unknown as Response;
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: unknown, init?: RequestInit) => abortingJsonResponse(init?.signal)),
+    );
+    const compat = createOpenAICompatTransport({ name: "test", baseURL: "http://mock.test" });
+    const compatJsonErr = await compat
+      .chat({ model: "m", messages: [] }, { timeoutMs: 10 })
+      .catch((e: unknown) => e);
+    expect(compatJsonErr).toBeInstanceOf(ConnectionError);
+    expect((compatJsonErr as Error).message).toMatch(/timed out after 10ms/);
+
+    const ollama = createOllamaTransport({ name: "ollama", baseURL: "http://mock.test" });
+    const ollamaJsonErr = await ollama
+      .chat({ model: "m", messages: [] }, { timeoutMs: 10 })
+      .catch((e: unknown) => e);
+    expect(ollamaJsonErr).toBeInstanceOf(ConnectionError);
+    expect((ollamaJsonErr as Error).message).toMatch(/timed out after 10ms/);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(new ReadableStream({ start() {} }), { status: 200 })),
+    );
+    const compatStreamErr = await (async () => {
+      for await (const _ of compat.chatStream({ model: "m", messages: [] }, { timeoutMs: 10 })) {
+        // drain
+      }
+    })().catch((e: unknown) => e);
+    expect(compatStreamErr).toBeInstanceOf(ConnectionError);
+    expect((compatStreamErr as Error).message).toMatch(/timed out after 10ms/);
+
+    const ollamaStreamErr = await (async () => {
+      for await (const _ of ollama.chatStream({ model: "m", messages: [] }, { timeoutMs: 10 })) {
+        // drain
+      }
+    })().catch((e: unknown) => e);
+    expect(ollamaStreamErr).toBeInstanceOf(ConnectionError);
+    expect((ollamaStreamErr as Error).message).toMatch(/timed out after 10ms/);
   });
 });
 
@@ -204,6 +259,32 @@ describe("ollama streams and payloads", () => {
       transport().chat({ messages: [{ role: "user", content: "hi" }] }),
     ).rejects.toBeInstanceOf(ConfigurationError);
   });
+
+  it("rejects missing message, malformed embeddings, and empty pull streams", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ model: "qwen3.8:27b", done: true })),
+    );
+    await expect(
+      transport().chat({ model: "qwen3.8:27b", messages: [{ role: "user", content: "hi" }] }),
+    ).rejects.toThrow(/missing message/);
+
+    for (const payload of [{ embeddings: [] }, { embeddings: [["x"]] }, { embeddings: "bad" }]) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => jsonResponse(payload)),
+      );
+      await expect(
+        transport().embed({ model: "qwen3-embedding:8b", input: "hi" }),
+      ).rejects.toBeInstanceOf(APIError);
+    }
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => streamResponse(["not json\n"])),
+    );
+    await expect(transport().pullModel("qwen3.8:27b")).rejects.toBeInstanceOf(APIError);
+  });
 });
 
 describe("openai-compat strictness", () => {
@@ -240,5 +321,55 @@ describe("openai-compat strictness", () => {
       transport().chat({ messages: [{ role: "user", content: "hi" }] }),
     ).rejects.toBeInstanceOf(ConfigurationError);
     await expect(transport().embed({ input: "hi" })).rejects.toBeInstanceOf(ConfigurationError);
+  });
+
+  it("preserves tool call type and ignores empty continuation id/name strings", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        streamResponse([
+          `data: ${JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: "call_1",
+                      type: "function",
+                      function: { name: "get", arguments: '{"a":' },
+                    },
+                  ],
+                },
+              },
+            ],
+          })}\n\n`,
+          `data: ${JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [{ index: 0, id: "", function: { name: "", arguments: "1}" } }],
+                },
+              },
+            ],
+          })}\n\n`,
+          "data: [DONE]\n\n",
+        ]),
+      ),
+    );
+    const chunks = [];
+    for await (const chunk of transport().chatStream({ model: "m", messages: [] })) {
+      chunks.push(chunk);
+    }
+    expect(chunks[0]?.delta.toolCalls?.[0]).toEqual({
+      index: 0,
+      id: "call_1",
+      type: "function",
+      function: { name: "get", arguments: '{"a":' },
+    });
+    expect(chunks[1]?.delta.toolCalls?.[0]).toEqual({
+      index: 0,
+      function: { arguments: "1}" },
+    });
   });
 });

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   QWEN3_8_27B,
+  QWEN3_8_FLASH,
+  QWEN3_8_FLASH_NEXT,
   QWEN3_CODER_480B,
   QWEN3_EMBEDDING_8B,
   QWQ_32B,
@@ -137,9 +139,40 @@ describe("recommend", () => {
   it("keeps Qwen3.8 provider mappings and output limits current", () => {
     expect(QWEN3_8_27B.dashscopeId).toBe("qwen3.8-27b");
     expect(QWEN3_8_27B.maxOutput).toBe(131072);
+    expect(getModel("qwen3.8-max")?.openrouterId).toBe("qwen/qwen3.8-max");
     expect(getModel("qwen3.8-omni-flash")?.maxOutput).toBe(131072);
     expect(getModel("qwen3.8-flash-next")?.maxOutput).toBe(131072);
     expect(getModel("qwen3.8-2.4t-a95b")?.dashscopeId).toBe("qwen3.8-2.4t-a95b");
+  });
+
+  it("keeps Qwen3.6, Qwen3-Coder/VL/Embedding, QwQ, and Qwen2.5 specs and mappings current", () => {
+    expect(getModel("qwen3.6-27b")?.dashscopeId).toBe("qwen3.6-27b");
+    expect(getModel("qwen3.6-35b-a3b")?.dashscopeId).toBe("qwen3.6-35b-a3b");
+    expect(getModel("qwen3-next-80b-a3b")?.dashscopeId).toBe("qwen3-next-80b-a3b-instruct");
+    expect(getModel("qwen3-coder-30b")?.dashscopeId).toBe("qwen3-coder-flash");
+
+    for (const [id, dsId] of [
+      ["qwen3-vl-8b", "qwen3-vl-8b-instruct"],
+      ["qwen3-vl-32b", "qwen3-vl-32b-instruct"],
+      ["qwen3-vl-235b", "qwen3-vl-235b-a22b-instruct"],
+    ] as const) {
+      const m = getModel(id);
+      expect(m?.contextWindow).toBe(262144);
+      expect(m?.dashscopeId).toBe(dsId);
+    }
+    expect(getModel("qwen3-vl-235b")?.params).toBe("235B-A22B");
+
+    expect(QWQ_32B.contextWindow).toBe(131072);
+    expect(QWQ_32B.openrouterId).toBe("qwen/qwq-32b");
+    expect(QWEN3_EMBEDDING_8B.openrouterId).toBe("qwen/qwen3-embedding-8b");
+    expect(getModel("qwen3-embedding-0.6b")?.openrouterId).toBe("qwen/qwen3-embedding-0.6b");
+    expect(getModel("qwen3-embedding-4b")?.openrouterId).toBe("qwen/qwen3-embedding-4b");
+    expect(getModel("qwen3-0.6b")?.openrouterId).toBe("qwen/qwen3-0.6b");
+    expect(getModel("qwen3-1.7b")?.openrouterId).toBe("qwen/qwen3-1.7b");
+    expect(getModel("qwen3-4b")?.openrouterId).toBe("qwen/qwen3-4b");
+    expect(getModel("qwen2.5-vl-32b")?.openrouterId).toBe("qwen/qwen2.5-vl-32b-instruct");
+    expect(getModel("qwen-turbo")?.openrouterId).toBe("qwen/qwen-turbo");
+    expect(getModel("qwen-max")?.openrouterId).toBe("qwen/qwen-max");
   });
 
   it("validates minContext values", () => {
@@ -184,5 +217,17 @@ describe("recommend", () => {
     const picks = recommendAll({ use: "vision", local: true });
     expect(picks.length).toBeGreaterThan(0);
     for (const m of picks) expect(m.capabilities).toContain("vision");
+  });
+
+  it("aliases QWEN3_8_FLASH_NEXT to the catalog QWEN3_8_FLASH entry", () => {
+    expect(QWEN3_8_FLASH_NEXT).toBe(QWEN3_8_FLASH);
+    expect(models).toContain(QWEN3_8_FLASH_NEXT);
+  });
+
+  it("excludes embed-only models when use is omitted", () => {
+    for (const list of [recommendAll({}), recommendAll({ local: true })]) {
+      expect(list.length).toBeGreaterThan(0);
+      expect(list.some((m) => m.capabilities.includes("embed"))).toBe(false);
+    }
   });
 });

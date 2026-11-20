@@ -18,6 +18,12 @@ export function joinURL(baseURL: string, path: string): string {
   return `${base}${suffix}`;
 }
 
+const signalTimeouts = new WeakMap<AbortSignal, number>();
+
+export function signalTimeoutMs(signal?: AbortSignal): number | undefined {
+  return signal ? signalTimeouts.get(signal) : undefined;
+}
+
 export function isAbortError(cause: unknown): boolean {
   if (cause instanceof Error && cause.name === "AbortError") return true;
   return (
@@ -26,6 +32,28 @@ export function isAbortError(cause: unknown): boolean {
     "name" in cause &&
     (cause as { name?: unknown }).name === "AbortError"
   );
+}
+
+export function isTimeoutError(cause: unknown): boolean {
+  if (cause instanceof Error && cause.name === "TimeoutError") return true;
+  return (
+    typeof cause === "object" &&
+    cause !== null &&
+    "name" in cause &&
+    (cause as { name?: unknown }).name === "TimeoutError"
+  );
+}
+
+export function timeoutError(
+  path: string,
+  timeoutMs: number | undefined,
+  cause: unknown,
+): ConnectionError {
+  const message =
+    timeoutMs !== undefined
+      ? `Request to ${path} timed out after ${timeoutMs}ms.`
+      : `Request to ${path} timed out.`;
+  return new ConnectionError(message, { cause });
 }
 
 /**
@@ -44,14 +72,25 @@ export function effectiveSignal(opts?: {
       );
     }
     const timeout = AbortSignal.timeout(opts.timeoutMs);
-    return opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout;
+    const combined = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout;
+    signalTimeouts.set(combined, opts.timeoutMs);
+    return combined;
   }
   return opts?.signal;
 }
 
 export async function requestJSON<T>(opts: HttpOptions): Promise<T> {
-  const response = await rawRequest(opts);
-  const text = await response.text();
+  const signal = opts.timeoutMs !== undefined ? effectiveSignal(opts) : opts.signal;
+  const effectiveTimeoutMs = opts.timeoutMs ?? signalTimeoutMs(signal);
+  const response = await rawRequest({ ...opts, signal, timeoutMs: undefined });
+  let text: string;
+  try {
+    text = await response.text();
+  } catch (cause) {
+    if (isAbortError(cause)) throw cause;
+    if (isTimeoutError(cause)) throw timeoutError(opts.path, effectiveTimeoutMs, cause);
+    throw errorFromCause(cause);
+  }
   let parsed: unknown;
   try {
     parsed = text ? JSON.parse(text) : {};
@@ -80,7 +119,8 @@ export async function rawRequest(opts: HttpOptions): Promise<Response> {
   }
 
   let response: Response;
-  const signal = effectiveSignal(opts);
+  const signal = opts.timeoutMs !== undefined ? effectiveSignal(opts) : opts.signal;
+  const effectiveTimeoutMs = opts.timeoutMs ?? signalTimeoutMs(signal);
   try {
     response = await fetch(joinURL(opts.baseURL, opts.path), {
       method: opts.method ?? "POST",
@@ -90,15 +130,8 @@ export async function rawRequest(opts: HttpOptions): Promise<Response> {
     });
   } catch (cause) {
     if (isAbortError(cause)) throw cause;
-    if (
-      typeof cause === "object" &&
-      cause !== null &&
-      "name" in cause &&
-      (cause as { name?: unknown }).name === "TimeoutError"
-    ) {
-      throw new ConnectionError(`Request to ${opts.path} timed out after ${opts.timeoutMs}ms.`, {
-        cause,
-      });
+    if (isTimeoutError(cause)) {
+      throw timeoutError(opts.path, effectiveTimeoutMs, cause);
     }
     throw errorFromCause(cause);
   }
@@ -109,20 +142,22 @@ export async function rawRequest(opts: HttpOptions): Promise<Response> {
       body = await response.clone().json();
     } catch (cause) {
       if (isAbortError(cause)) throw cause;
+      if (isTimeoutError(cause)) throw timeoutError(opts.path, effectiveTimeoutMs, cause);
       try {
         body = await response.text();
       } catch (inner) {
         if (isAbortError(inner)) throw inner;
+        if (isTimeoutError(inner)) throw timeoutError(opts.path, effectiveTimeoutMs, inner);
         body = undefined;
       }
     }
-    const retryAfterHeader = response.headers.get("retry-after");
-    const retryAfter = retryAfterHeader ? Number(retryAfterHeader) : undefined;
-    throw errorFromResponse(
-      response.status,
-      body,
-      Number.isFinite(retryAfter) ? retryAfter : undefined,
-    );
+    const retryAfterRaw = response.headers.get("retry-after")?.trim();
+    const retryAfterNum = retryAfterRaw ? Number(retryAfterRaw) : undefined;
+    const retryAfter =
+      retryAfterNum !== undefined && Number.isFinite(retryAfterNum) && retryAfterNum >= 0
+        ? retryAfterNum
+        : undefined;
+    throw errorFromResponse(response.status, body, retryAfter);
   }
 
   return response;
@@ -137,7 +172,37 @@ function isCompleteJSON(text: string): boolean {
   }
 }
 
-export async function* sseData(response: Response, signal?: AbortSignal): AsyncGenerator<string> {
+type ByteReadResult = { done: boolean; value?: Uint8Array };
+interface ByteReader {
+  read(): Promise<ByteReadResult>;
+}
+
+async function readWithSignal(reader: ByteReader, signal?: AbortSignal): Promise<ByteReadResult> {
+  signal?.throwIfAborted();
+  if (!signal) return reader.read();
+  return new Promise<ByteReadResult>((resolve, reject) => {
+    const onAbort = () => {
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    reader.read().then(
+      (result) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(result);
+      },
+      (err) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(err);
+      },
+    );
+  });
+}
+
+export async function* sseData(
+  response: Response,
+  signal?: AbortSignal,
+  path?: string,
+): AsyncGenerator<string> {
   const body = response.body;
   if (!body) return;
   const reader = body.getReader();
@@ -155,8 +220,7 @@ export async function* sseData(response: Response, signal?: AbortSignal): AsyncG
 
   try {
     outer: while (true) {
-      signal?.throwIfAborted();
-      const { done, value } = await reader.read();
+      const { done, value } = await readWithSignal(reader, signal);
       if (done) buffer += decoder.decode();
       else buffer += decoder.decode(value, { stream: true });
 
@@ -191,6 +255,12 @@ export async function* sseData(response: Response, signal?: AbortSignal): AsyncG
         break;
       }
     }
+  } catch (cause) {
+    if (isAbortError(cause)) throw cause;
+    if (isTimeoutError(cause)) {
+      throw timeoutError(path ?? "stream", signalTimeoutMs(signal), cause);
+    }
+    throw cause;
   } finally {
     await reader.cancel().catch(() => undefined);
     reader.releaseLock();
@@ -200,6 +270,7 @@ export async function* sseData(response: Response, signal?: AbortSignal): AsyncG
 export async function* ndjsonLines(
   response: Response,
   signal?: AbortSignal,
+  path?: string,
 ): AsyncGenerator<string> {
   const body = response.body;
   if (!body) return;
@@ -208,8 +279,7 @@ export async function* ndjsonLines(
   let buffer = "";
   try {
     while (true) {
-      signal?.throwIfAborted();
-      const { done, value } = await reader.read();
+      const { done, value } = await readWithSignal(reader, signal);
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       let index = buffer.indexOf("\n");
@@ -223,6 +293,12 @@ export async function* ndjsonLines(
     buffer += decoder.decode();
     const tail = buffer.trim();
     if (tail) yield tail;
+  } catch (cause) {
+    if (isAbortError(cause)) throw cause;
+    if (isTimeoutError(cause)) {
+      throw timeoutError(path ?? "stream", signalTimeoutMs(signal), cause);
+    }
+    throw cause;
   } finally {
     await reader.cancel().catch(() => undefined);
     reader.releaseLock();
