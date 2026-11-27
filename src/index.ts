@@ -77,4 +77,4 @@ export type {
 
 export { modelRefId, modelRefOllama, modelRefOpenRouter } from "./types";
 
-export const VERSION = "0.3.0";
+export const VERSION = "0.3.1";

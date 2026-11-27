@@ -6,7 +6,7 @@
 
 Zero runtime dependencies. Requires Node `^22.12.0 || ^24.0.0 || >=26.0.0`.
 
-![qwen CLI demo](./assets/demo.png)
+![qwen CLI demo](https://raw.githubusercontent.com/kyan0045/qwen/main/assets/demo.png)
 
 ---
 

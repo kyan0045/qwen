@@ -9,6 +9,16 @@ breaking changes.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-27
+
+### Fixed
+
+- Hardened provider resolution, request timeouts, CLI dispatch, and model catalog handling.
+
+### Changed
+
+- Added CLI demo screenshot to `README.md`.
+
 ## [0.3.0] - 2026-11-01
 
 ### Added

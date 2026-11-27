@@ -1,6 +1,6 @@
 {
   "name": "qwen",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Unofficial TypeScript toolkit for Qwen models: typed model catalog, multi-provider client (DashScope, OpenAI-compatible, Ollama) and a fast CLI.",
   "keywords": [
     "qwen",
